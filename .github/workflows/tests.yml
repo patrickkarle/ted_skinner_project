@@ -47,7 +47,11 @@ jobs:
         with:
           path: src-tauri/target
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
-- name: Create frontend dist directory        run: |          mkdir -p dist          echo '<!DOCTYPE html><html><body>Test</body></html>' > dist/index.html
+
+      - name: Create frontend dist directory
+        run: |
+          mkdir -p dist
+          echo '<!DOCTYPE html><html><body>Test</body></html>' > dist/index.html
 
       - name: Build tests
         working-directory: ./src-tauri
@@ -90,7 +94,11 @@ jobs:
           components: clippy
           override: true
 
-- name: Create frontend dist directory        run: |          mkdir -p dist          echo '<!DOCTYPE html><html><body>Test</body></html>' > dist/index.html
+      - name: Create frontend dist directory
+        run: |
+          mkdir -p dist
+          echo '<!DOCTYPE html><html><body>Test</body></html>' > dist/index.html
+
       - name: Run Clippy
         working-directory: ./src-tauri
         run: cargo clippy --all-targets --all-features -- -D warnings
