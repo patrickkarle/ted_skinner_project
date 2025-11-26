@@ -6,9 +6,7 @@ use fullintel_agent::agent::{AgentState, PhaseStatus};
 use fullintel_agent::llm::{
     CircuitBreaker, CircuitBreakerError, CircuitState, LLMClient, LLMRequest, RateLimiter,
 };
-use fullintel_agent::manifest::{
-    Manifest,
-};
+use fullintel_agent::manifest::Manifest;
 
 use std::io::Write;
 use std::time::Duration;
@@ -887,23 +885,22 @@ fn test_circuit_breaker_state_persistence() {
     // 1. Create breaker (failure=3, success=2, timeout=60s)
     let mut breaker = CircuitBreaker::new(3, 2, Duration::from_secs(60));
 
-    // 2. Trigger 2 failures using call() with Err results
-    let _ = breaker.call(|| Err::<(), _>("failure 1"));
-    let _ = breaker.call(|| Err::<(), _>("failure 2"));
-
-    // 3. Make successful call (circuit still closed, failure count < 3)
+    // 2. First verify circuit starts closed - success should work
     let result1 = breaker.call(|| Ok::<&str, &str>("First call"));
     assert!(result1.is_ok());
 
-    // 4. Trigger one more failure (should open circuit, total=3)
+    // 3. Trigger 3 CONSECUTIVE failures to open circuit
+    // Note: on_success() resets failure_count, so failures must be consecutive
+    let _ = breaker.call(|| Err::<(), _>("failure 1"));
+    let _ = breaker.call(|| Err::<(), _>("failure 2"));
     let _ = breaker.call(|| Err::<(), _>("failure 3"));
 
-    // 5. Verify circuit is open - next call fails immediately
+    // 4. Verify circuit is now open - next call fails immediately with Open error
     let result2 = breaker.call(|| Ok::<&str, &str>("Should not execute"));
     assert!(result2.is_err());
     assert!(matches!(result2, Err(CircuitBreakerError::Open)));
 
-    // Validates: CircuitBreaker state persistence, failure counting across calls
+    // Validates: CircuitBreaker state persistence, consecutive failure counting
 }
 
 // ------------------------------------------------------------------

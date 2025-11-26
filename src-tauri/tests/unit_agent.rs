@@ -82,7 +82,10 @@ fn test_agent_new_initializes_correctly() {
     let agent = Agent::new(manifest, api_key, None);
 
     // Verify agent created successfully (implicitly - would panic if failed)
-    assert!(agent.get_context("nonexistent").is_none(), "New agent should have empty context");
+    assert!(
+        agent.get_context("nonexistent").is_none(),
+        "New agent should have empty context"
+    );
 }
 
 #[test]

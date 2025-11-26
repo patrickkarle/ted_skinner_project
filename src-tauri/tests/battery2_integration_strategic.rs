@@ -16,8 +16,8 @@
 //
 // ============================================================================
 
-use fullintel_agent::agent::{Agent};
-use fullintel_agent::manifest::{Manifest};
+use fullintel_agent::agent::Agent;
+use fullintel_agent::manifest::Manifest;
 use std::io::Write;
 use tempfile::NamedTempFile;
 
