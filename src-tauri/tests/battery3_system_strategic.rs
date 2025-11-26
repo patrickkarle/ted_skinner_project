@@ -104,7 +104,7 @@ mod test_utils {
     }
 
     /// Create multi-phase manifest with specified number of phases
-    pub fn create_multi_phase_manifest(num_phases: usize) -> (Manifest, NamedTempFile) {
+    pub fn _create_multi_phase_manifest(num_phases: usize) -> (Manifest, NamedTempFile) {
         let phases: Vec<TestPhaseConfig> = (0..num_phases)
             .map(|i| {
                 let mut config = TestPhaseConfig::new(
@@ -734,7 +734,7 @@ async fn test_llm_provider_failover() {
     );
 
     // Google circuit breaker (fallback provider)
-    let mut google_circuit = CircuitBreaker::new(
+    let google_circuit = CircuitBreaker::new(
         5,                       // 5 failures to open
         2,                       // 2 successes to close
         Duration::from_secs(60), // 60s timeout

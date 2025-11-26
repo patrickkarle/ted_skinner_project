@@ -96,7 +96,7 @@ fn test_agent_new_with_empty_manifest() {
     let _agent = Agent::new(manifest, api_key, None);
 
     // Agent should construct successfully even with empty manifest
-    assert!(true, "Agent should handle empty manifest");
+    // Compile-time verification - Agent constructor succeeds
 }
 
 #[test]
@@ -110,7 +110,7 @@ fn test_agent_new_with_valid_api_key() {
     let _agent = Agent::new(manifest, api_key, None);
 
     // Agent creation should succeed
-    assert!(true, "Agent should construct with valid API key format");
+    // Compile-time verification - constructor succeeds with API key
 }
 
 // ----------------------------------------------------------------------------
@@ -149,7 +149,7 @@ fn test_agent_stores_manifest() {
     let _agent = Agent::new(manifest, api_key, None);
 
     // Agent should construct successfully with manifest containing phases
-    assert!(true, "Agent should store manifest with phases");
+    // Compile-time verification - constructor succeeds with phases
 }
 
 // ----------------------------------------------------------------------------
@@ -167,7 +167,7 @@ fn test_agent_without_window() {
     let _agent = Agent::new(manifest, api_key, None);
 
     // Agent should work fine without window (for testing/CLI usage)
-    assert!(true, "Agent should work without window handle");
+    // Compile-time verification - constructor succeeds without window
 }
 
 // ----------------------------------------------------------------------------
@@ -243,7 +243,7 @@ fn test_agent_creates_llm_client() {
 
     // Agent should successfully create with LLMClient
     // (LLMClient initialization happens in constructor)
-    assert!(true, "Agent should initialize LLMClient");
+    // Compile-time verification - LLMClient initialized
 }
 
 // ============================================================================
