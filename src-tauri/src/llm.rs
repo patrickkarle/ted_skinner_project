@@ -798,7 +798,7 @@ mod tests {
     fn test_rate_limiter_tokens_field_initialization() {
         // TEST-UNIT-3020-F1: Verify tokens field initializes to full capacity
         let requests_per_minute = 60.0;
-        let mut limiter = RateLimiter::new(requests_per_minute);
+        let limiter = RateLimiter::new(requests_per_minute);
 
         assert_eq!(
             limiter.available_tokens(),
@@ -810,7 +810,7 @@ mod tests {
     #[test]
     fn test_rate_limiter_capacity_field() {
         // TEST-UNIT-3020-F2: Verify capacity field stores maximum token limit
-        let mut limiter = RateLimiter::new(100.0);
+        let limiter = RateLimiter::new(100.0);
 
         // Capacity prevents token accumulation beyond limit
         std::thread::sleep(Duration::from_secs(2));
@@ -823,7 +823,7 @@ mod tests {
     #[test]
     fn test_rate_limiter_refill_rate_calculation() {
         // TEST-UNIT-3020-F3: Verify refill_rate correctly converts RPM to tokens-per-second
-        let mut limiter = RateLimiter::new(60.0);
+        let limiter = RateLimiter::new(60.0);
 
         // refill_rate should be RPM / 60 = 1.0 token per second
         assert_eq!(
@@ -835,7 +835,7 @@ mod tests {
     #[test]
     fn test_rate_limiter_last_refill_timestamp() {
         // TEST-UNIT-3020-F4: Verify last_refill tracks token refill timing
-        let mut limiter = RateLimiter::new(60.0);
+        let limiter = RateLimiter::new(60.0);
         let creation_time = Instant::now();
 
         // last_refill should be initialized near current time
@@ -849,7 +849,7 @@ mod tests {
     #[test]
     fn test_rate_limiter_constructor() {
         // TEST-UNIT-3021: Verify RateLimiter::new() initializes all fields
-        let mut limiter = RateLimiter::new(120.0);
+        let limiter = RateLimiter::new(120.0);
 
         assert_eq!(limiter.tokens, 120.0, "tokens should equal capacity");
         assert_eq!(limiter.capacity, 120.0, "capacity should equal parameter");
@@ -863,7 +863,7 @@ mod tests {
     #[test]
     fn test_rate_limiter_try_acquire_wait_calculation() {
         // TEST-UNIT-3022-V1: Verify wait_seconds variable calculation when rate limited
-        let mut limiter = RateLimiter::new(60.0); // 1 token/sec
+        let limiter = RateLimiter::new(60.0); // 1 token/sec
 
         // Exhaust all tokens
         for _ in 0..60 {
@@ -886,7 +886,7 @@ mod tests {
     #[test]
     fn test_rate_limiter_token_availability_branch() {
         // TEST-UNIT-3022-B1: Verify branch logic for token availability (>= 1.0)
-        let mut limiter = RateLimiter::new(10.0);
+        let limiter = RateLimiter::new(10.0);
 
         // TRUE branch: tokens available
         assert!(
@@ -909,7 +909,7 @@ mod tests {
     #[test]
     fn test_rate_limiter_error_on_rate_limit() {
         // TEST-UNIT-3022-E1: Verify Err(Duration) returned when rate limited
-        let mut limiter = RateLimiter::new(5.0);
+        let limiter = RateLimiter::new(5.0);
 
         // Exhaust tokens
         for _ in 0..5 {
@@ -931,7 +931,7 @@ mod tests {
     #[test]
     fn test_rate_limiter_refill_now_variable() {
         // TEST-UNIT-3023-V1: Verify refill() calculates current time correctly
-        let mut limiter = RateLimiter::new(60.0);
+        let limiter = RateLimiter::new(60.0);
         limiter.try_acquire().unwrap(); // Consume 1 token
 
         std::thread::sleep(Duration::from_secs(1));
@@ -947,7 +947,7 @@ mod tests {
     #[test]
     fn test_rate_limiter_refill_elapsed_variable() {
         // TEST-UNIT-3023-V2: Verify refill() calculates elapsed time correctly
-        let mut limiter = RateLimiter::new(120.0);
+        let limiter = RateLimiter::new(120.0);
 
         // Consume 10 tokens
         for _ in 0..10 {
@@ -968,7 +968,7 @@ mod tests {
     #[test]
     fn test_rate_limiter_available_tokens_method() {
         // TEST-UNIT-3024: Verify available_tokens() returns current token count
-        let mut limiter = RateLimiter::new(100.0);
+        let limiter = RateLimiter::new(100.0);
 
         assert_eq!(
             limiter.available_tokens(),
@@ -1033,7 +1033,7 @@ mod tests {
     #[test]
     fn test_circuit_breaker_state_field_initialization() {
         // TEST-UNIT-3030-F1: Verify state field initializes to Closed
-        let mut breaker = CircuitBreaker::new(5, 2, Duration::from_secs(60));
+        let breaker = CircuitBreaker::new(5, 2, Duration::from_secs(60));
 
         assert_eq!(
             breaker.state(),
@@ -1074,7 +1074,7 @@ mod tests {
     #[test]
     fn test_circuit_breaker_constructor() {
         // TEST-UNIT-3033: Verify CircuitBreaker::new() initializes all fields
-        let mut breaker = CircuitBreaker::new(3, 2, Duration::from_secs(30));
+        let breaker = CircuitBreaker::new(3, 2, Duration::from_secs(30));
 
         assert_eq!(breaker.state(), CircuitState::Closed);
         assert_eq!(breaker.failure_threshold, 3);
@@ -1085,7 +1085,7 @@ mod tests {
     #[test]
     fn test_circuit_breaker_closed_to_open_transition() {
         // TEST-UNIT-3034-B1: Verify Closed → Open after failure_threshold failures
-        let mut breaker = CircuitBreaker::new(3, 2, Duration::from_secs(60));
+        let breaker = CircuitBreaker::new(3, 2, Duration::from_secs(60));
 
         assert_eq!(breaker.state(), CircuitState::Closed);
 
@@ -1112,7 +1112,7 @@ mod tests {
     #[test]
     fn test_circuit_breaker_open_to_halfopen_transition() {
         // TEST-UNIT-3034-B2: Verify Open → HalfOpen after timeout
-        let mut breaker = CircuitBreaker::new(1, 2, Duration::from_millis(100));
+        let breaker = CircuitBreaker::new(1, 2, Duration::from_millis(100));
 
         // Open the circuit with 1 failure
         let _: Result<(), _> = breaker.call(|| Err("test error"));
@@ -1134,7 +1134,7 @@ mod tests {
     #[test]
     fn test_circuit_breaker_halfopen_to_closed_transition() {
         // TEST-UNIT-3034-B3: Verify HalfOpen → Closed after success_threshold successes
-        let mut breaker = CircuitBreaker::new(1, 2, Duration::from_millis(100));
+        let breaker = CircuitBreaker::new(1, 2, Duration::from_millis(100));
 
         // Open the circuit
         let _: Result<(), _> = breaker.call(|| Err("test error"));
@@ -1400,7 +1400,7 @@ mod tests {
     #[test]
     fn test_rate_limiter_exact_capacity_boundary() {
         // TEST-UNIT-LLMCLIENT-011: Rate limiter at exact capacity boundary
-        let mut limiter = RateLimiter::new(5.0);
+        let limiter = RateLimiter::new(5.0);
         assert_eq!(limiter.available_tokens(), 5.0);
 
         for _ in 0..5 {
@@ -1414,7 +1414,7 @@ mod tests {
     #[test]
     fn test_rate_limiter_refill_restores_capacity() {
         // TEST-UNIT-LLMCLIENT-012: Refill mechanism restores tokens over time
-        let mut limiter = RateLimiter::new(60.0);
+        let limiter = RateLimiter::new(60.0);
 
         for _ in 0..3 {
             let _ = limiter.try_acquire();
