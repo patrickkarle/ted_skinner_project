@@ -1,0 +1,806 @@
+# L2-ICD-03: Component Interfaces Control Document
+
+**Document ID:** L2-ICD-COMP-001
+**Interface Name:** Rust Backend Component Interfaces
+**Version:** 1.0
+**Date:** 2025-11-19
+**Parent:** L1-SAD-FULLINTEL-001
+**Traceability:** L1-SAD Section 6 (Component Specifications)
+
+---
+
+## 1. Interface Overview
+
+### 1.1 Purpose
+Defines the internal interfaces between Rust backend components (AgentOrchestrator, ToolRegistry, LLMClient, QualityGates, StateManager).
+
+### 1.2 Component Dependency Graph
+```
+┌─────────────────────────────────────────────┐
+│         AgentOrchestrator (Central)         │
+│                                             │
+│  ┌───────────┐  ┌──────────┐  ┌─────────┐ │
+│  │  Tool     │  │   LLM    │  │ Quality │ │
+│  │ Registry  │  │  Client  │  │  Gates  │ │
+│  └───────────┘  └──────────┘  └─────────┘ │
+│                                             │
+│              ┌───────────┐                  │
+│              │   State   │                  │
+│              │  Manager  │                  │
+│              └───────────┘                  │
+└─────────────────────────────────────────────┘
+```
+
+---
+
+## 2. Interface: AgentOrchestrator ↔ ToolRegistry
+
+### 2.1 Tool Trait Definition
+
+**Purpose:** Standardized interface for all external tools
+
+**Rust Interface:**
+```rust
+use async_trait::async_trait;
+use serde_json::Value;
+use anyhow::Result;
+
+#[async_trait]
+pub trait Tool: Send + Sync {
+    /// Returns the unique tool identifier
+    fn name(&self) -> &str;
+
+    /// Returns JSON schema describing tool parameters
+    fn schema(&self) -> ToolSchema;
+
+    /// Executes the tool with provided arguments
+    ///
+    /// # Arguments
+    /// * `args` - Tool-specific parameters as JSON
+    ///
+    /// # Returns
+    /// Tool output as string, or error
+    async fn execute(&self, args: Value) -> Result<String>;
+
+    /// Optional: Returns cost estimate for this tool execution
+    fn estimate_cost(&self, args: &Value) -> Option<f64> {
+        None
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolSchema {
+    pub description: String,
+    pub parameters: Vec<ToolParameter>,
+    pub required_parameters: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolParameter {
+    pub name: String,
+    pub param_type: String,  // "string", "number", "boolean", etc.
+    pub description: String,
+    pub default: Option<Value>,
+}
+```
+
+### 2.2 ToolRegistry Interface
+
+**Purpose:** Manage and execute registered tools
+
+**Rust Interface:**
+```rust
+use std::collections::HashMap;
+use std::sync::Arc;
+
+pub struct ToolRegistry {
+    tools: HashMap<String, Arc<dyn Tool>>,
+}
+
+impl ToolRegistry {
+    /// Creates empty tool registry
+    pub fn new() -> Self {
+        Self {
+            tools: HashMap::new(),
+        }
+    }
+
+    /// Registers a new tool
+    ///
+    /// # Arguments
+    /// * `tool` - Tool implementation
+    ///
+    /// # Panics
+    /// If tool with same name already registered
+    pub fn register(&mut self, tool: Arc<dyn Tool>) {
+        let name = tool.name().to_string();
+        if self.tools.contains_key(&name) {
+            panic!("Tool '{}' already registered", name);
+        }
+        self.tools.insert(name, tool);
+    }
+
+    /// Executes a registered tool
+    ///
+    /// # Arguments
+    /// * `name` - Tool identifier
+    /// * `args` - Tool parameters as JSON
+    ///
+    /// # Returns
+    /// Tool output, or error if tool not found or execution fails
+    pub async fn execute(&self, name: &str, args: Value) -> Result<String> {
+        let tool = self.tools
+            .get(name)
+            .ok_or_else(|| anyhow::anyhow!("Tool '{}' not registered", name))?;
+
+        tool.execute(args).await
+    }
+
+    /// Lists all registered tool names
+    pub fn list_available(&self) -> Vec<String> {
+        self.tools.keys().cloned().collect()
+    }
+
+    /// Gets schema for specific tool
+    pub fn get_schema(&self, name: &str) -> Option<ToolSchema> {
+        self.tools.get(name).map(|tool| tool.schema())
+    }
+}
+```
+
+### 2.3 Example Tool Implementation
+
+**TavilySearchTool:**
+```rust
+pub struct TavilySearchTool {
+    api_key: String,
+    client: reqwest::Client,
+}
+
+#[async_trait]
+impl Tool for TavilySearchTool {
+    fn name(&self) -> &str {
+        "search_tool"
+    }
+
+    fn schema(&self) -> ToolSchema {
+        ToolSchema {
+            description: "Web search using Tavily API".to_string(),
+            parameters: vec![
+                ToolParameter {
+                    name: "query".to_string(),
+                    param_type: "string".to_string(),
+                    description: "Search query".to_string(),
+                    default: None,
+                },
+                ToolParameter {
+                    name: "max_results".to_string(),
+                    param_type: "number".to_string(),
+                    description: "Maximum results to return".to_string(),
+                    default: Some(json!(5)),
+                },
+            ],
+            required_parameters: vec!["query".to_string()],
+        }
+    }
+
+    async fn execute(&self, args: Value) -> Result<String> {
+        let query = args.get("query")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("Missing 'query' parameter"))?;
+
+        let max_results = args.get("max_results")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(5);
+
+        // Call Tavily API
+        let response = self.client
+            .post("https://api.tavily.com/search")
+            .json(&json!({
+                "api_key": self.api_key,
+                "query": query,
+                "max_results": max_results
+            }))
+            .send()
+            .await?;
+
+        let results: Value = response.json().await?;
+
+        // Format results as string
+        let formatted = self.format_results(&results)?;
+
+        Ok(formatted)
+    }
+
+    fn estimate_cost(&self, _args: &Value) -> Option<f64> {
+        Some(0.001) // $0.001 per search
+    }
+}
+```
+
+---
+
+## 3. Interface: AgentOrchestrator ↔ LLMClient
+
+### 3.1 LLM Request/Response Contract
+
+**Rust Interface:**
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LLMRequest {
+    pub model: String,                    // e.g., "claude-3-5-sonnet"
+    pub prompt: String,                   // User/assistant messages
+    pub system: Option<String>,           // System prompt
+    pub max_tokens: usize,                // Max output tokens
+    pub temperature: f64,                 // 0.0-1.0
+    pub stop_sequences: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LLMResponse {
+    pub content: String,                  // Generated text
+    pub model: String,                    // Model used
+    pub tokens_in: usize,                 // Input tokens
+    pub tokens_out: usize,                // Output tokens
+    pub cost_usd: f64,                    // Calculated cost
+    pub latency_ms: u64,                  // Response time
+    pub finish_reason: String,            // "stop", "length", "error"
+}
+```
+
+### 3.2 LLMClient Interface
+
+**Rust Interface:**
+```rust
+pub struct LLMClient {
+    anthropic_key: Option<String>,
+    google_key: Option<String>,
+    deepseek_key: Option<String>,
+    client: reqwest::Client,
+}
+
+impl LLMClient {
+    /// Creates new LLM client with API keys
+    pub fn new(
+        anthropic_key: Option<String>,
+        google_key: Option<String>,
+        deepseek_key: Option<String>,
+    ) -> Self {
+        Self {
+            anthropic_key,
+            google_key,
+            deepseek_key,
+            client: reqwest::Client::new(),
+        }
+    }
+
+    /// Generates text using specified LLM
+    ///
+    /// # Arguments
+    /// * `request` - LLM request parameters
+    ///
+    /// # Returns
+    /// LLM response with content and metadata
+    ///
+    /// # Provider Routing
+    /// - "claude-*" → Anthropic
+    /// - "gemini-*" → Google
+    /// - "deepseek-*" → DeepSeek
+    pub async fn generate(&self, request: LLMRequest) -> Result<LLMResponse> {
+        let start = std::time::Instant::now();
+
+        let response = if request.model.starts_with("claude") {
+            self.generate_anthropic(request).await?
+        } else if request.model.starts_with("gemini") {
+            self.generate_gemini(request).await?
+        } else if request.model.starts_with("deepseek") {
+            self.generate_deepseek(request).await?
+        } else {
+            anyhow::bail!("Unsupported model: {}", request.model);
+        };
+
+        let latency_ms = start.elapsed().as_millis() as u64;
+
+        Ok(LLMResponse {
+            latency_ms,
+            ..response
+        })
+    }
+
+    /// Streaming generation (future enhancement)
+    pub async fn stream(
+        &self,
+        request: LLMRequest,
+    ) -> Result<impl Stream<Item = Result<String>>> {
+        unimplemented!("Streaming not yet implemented")
+    }
+
+    // Private provider-specific methods
+    async fn generate_anthropic(&self, request: LLMRequest) -> Result<LLMResponse> {
+        // Implementation in llm.rs
+    }
+
+    async fn generate_gemini(&self, request: LLMRequest) -> Result<LLMResponse> {
+        // Implementation in llm.rs
+    }
+
+    async fn generate_deepseek(&self, request: LLMRequest) -> Result<LLMResponse> {
+        // Implementation in llm.rs
+    }
+}
+```
+
+### 3.3 Error Handling
+
+**LLM-Specific Errors:**
+```rust
+#[derive(Debug, thiserror::Error)]
+pub enum LLMError {
+    #[error("API key not configured for provider: {0}")]
+    MissingApiKey(String),
+
+    #[error("Rate limit exceeded for provider: {0}")]
+    RateLimitExceeded(String),
+
+    #[error("Invalid model: {0}")]
+    InvalidModel(String),
+
+    #[error("Context length exceeded: {0} tokens")]
+    ContextLengthExceeded(usize),
+
+    #[error("Provider API error: {0}")]
+    ProviderError(String),
+}
+```
+
+---
+
+## 4. Interface: AgentOrchestrator ↔ QualityGates
+
+### 4.1 Quality Gate Contract
+
+**Rust Interface:**
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QualityGate {
+    pub gate_id: String,
+    pub phase_id: String,
+    pub description: String,
+    pub gate_type: QualityGateType,
+    pub failure_action: FailureAction,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum QualityGateType {
+    RegexMatch {
+        pattern: String,
+        should_match: bool,  // true = must match, false = must not match
+    },
+    ContainsText {
+        text: Vec<String>,
+        should_contain: bool,
+    },
+    MinLength {
+        min_chars: usize,
+    },
+    CustomValidator {
+        validator_name: String,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FailureAction {
+    Block,               // Block completion, require regeneration
+    Warn,                // Log warning, allow continuation
+    RetryWithPenalty,    // Retry with stricter prompt
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationResult {
+    pub passed: bool,
+    pub gate_id: String,
+    pub message: String,
+    pub details: Option<String>,
+}
+```
+
+### 4.2 QualityGateValidator Interface
+
+**Rust Interface:**
+```rust
+pub struct QualityGateValidator {
+    gates: Vec<QualityGate>,
+}
+
+impl QualityGateValidator {
+    /// Creates validator from manifest quality gates
+    pub fn from_manifest(manifest: &Manifest) -> Result<Self> {
+        let gates = manifest.phases
+            .iter()
+            .flat_map(|phase| &phase.quality_gates)
+            .cloned()
+            .collect();
+
+        Ok(Self { gates })
+    }
+
+    /// Validates output for specific phase
+    ///
+    /// # Arguments
+    /// * `phase_id` - Phase identifier
+    /// * `output` - Phase output to validate
+    ///
+    /// # Returns
+    /// Validation result with pass/fail and details
+    pub fn validate(&self, phase_id: &str, output: &str) -> ValidationResult {
+        let phase_gates: Vec<_> = self.gates
+            .iter()
+            .filter(|g| g.phase_id == phase_id)
+            .collect();
+
+        for gate in phase_gates {
+            match self.check_gate(gate, output) {
+                Ok(_) => continue,
+                Err(message) => {
+                    return ValidationResult {
+                        passed: false,
+                        gate_id: gate.gate_id.clone(),
+                        message,
+                        details: Some(output.chars().take(200).collect()),
+                    };
+                }
+            }
+        }
+
+        ValidationResult {
+            passed: true,
+            gate_id: "all".to_string(),
+            message: "All quality gates passed".to_string(),
+            details: None,
+        }
+    }
+
+    /// Checks single quality gate
+    fn check_gate(&self, gate: &QualityGate, output: &str) -> Result<(), String> {
+        match &gate.gate_type {
+            QualityGateType::RegexMatch { pattern, should_match } => {
+                let re = regex::Regex::new(pattern)
+                    .map_err(|e| format!("Invalid regex: {}", e))?;
+                let matches = re.is_match(output);
+
+                if matches == *should_match {
+                    Ok(())
+                } else {
+                    Err(format!("Regex validation failed: {}", gate.description))
+                }
+            }
+
+            QualityGateType::ContainsText { text, should_contain } => {
+                let output_lower = output.to_lowercase();
+                let contains = text.iter().any(|t| output_lower.contains(&t.to_lowercase()));
+
+                if contains == *should_contain {
+                    Ok(())
+                } else {
+                    Err(format!("Text validation failed: {}", gate.description))
+                }
+            }
+
+            QualityGateType::MinLength { min_chars } => {
+                if output.len() >= *min_chars {
+                    Ok(())
+                } else {
+                    Err(format!("Output too short: {} < {}", output.len(), min_chars))
+                }
+            }
+
+            QualityGateType::CustomValidator { validator_name } => {
+                // Extensibility point for custom validators
+                self.run_custom_validator(validator_name, output)
+            }
+        }
+    }
+
+    fn run_custom_validator(&self, name: &str, output: &str) -> Result<(), String> {
+        match name {
+            "coverage_quantification" => {
+                // Check for numbers + "articles"
+                if output.contains("articles") &&
+                   output.chars().any(|c| c.is_digit(10)) {
+                    Ok(())
+                } else {
+                    Err("Coverage volume not quantified".to_string())
+                }
+            }
+
+            "no_generic_text" => {
+                let generic_terms = ["placeholder", "[insert", "TODO", "TBD", "generic"];
+                let output_lower = output.to_lowercase();
+
+                for term in &generic_terms {
+                    if output_lower.contains(term) {
+                        return Err(format!("Contains generic text: '{}'", term));
+                    }
+                }
+                Ok(())
+            }
+
+            "roi_present" => {
+                if output.contains('$') || output.contains("USD") {
+                    Ok(())
+                } else {
+                    Err("ROI calculations not present".to_string())
+                }
+            }
+
+            _ => Err(format!("Unknown validator: {}", name))
+        }
+    }
+}
+```
+
+---
+
+## 5. Interface: AgentOrchestrator ↔ StateManager
+
+### 5.1 State Persistence Contract
+
+**Rust Interface:**
+```rust
+use rusqlite::{Connection, params};
+
+pub struct StateManager {
+    db_path: String,
+    conn: Connection,
+}
+
+impl StateManager {
+    /// Opens/creates SQLite database
+    pub fn new(db_path: &str) -> Result<Self> {
+        let conn = Connection::open(db_path)?;
+
+        // Create tables if not exist
+        conn.execute_batch(include_str!("schema.sql"))?;
+
+        Ok(Self {
+            db_path: db_path.to_string(),
+            conn,
+        })
+    }
+
+    /// Saves workflow session state
+    ///
+    /// # Arguments
+    /// * `session_id` - Unique session identifier
+    /// * `company` - Target company name
+    /// * `status` - Session status
+    /// * `current_phase` - Current phase identifier
+    pub fn save_session(
+        &self,
+        session_id: &str,
+        company: &str,
+        status: &str,
+        current_phase: Option<&str>,
+    ) -> Result<()> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO sessions (id, company, status, current_phase, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                session_id,
+                company,
+                status,
+                current_phase,
+                chrono::Utc::now().timestamp()
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Saves phase completion output
+    pub fn save_phase_output(
+        &self,
+        session_id: &str,
+        phase_id: &str,
+        output_json: &str,
+    ) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO phase_outputs (session_id, phase_id, output_json, completed_at)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![
+                session_id,
+                phase_id,
+                output_json,
+                chrono::Utc::now().timestamp()
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Loads session state for resume
+    pub fn load_session(&self, session_id: &str) -> Result<SessionState> {
+        let mut stmt = self.conn.prepare(
+            "SELECT company, status, current_phase FROM sessions WHERE id = ?1"
+        )?;
+
+        let session: (String, String, Option<String>) = stmt.query_row(
+            params![session_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        )?;
+
+        let mut stmt = self.conn.prepare(
+            "SELECT phase_id, output_json FROM phase_outputs WHERE session_id = ?1"
+        )?;
+
+        let outputs: HashMap<String, String> = stmt.query_map(
+            params![session_id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        )?
+        .collect::<Result<HashMap<_, _>, _>>()?;
+
+        Ok(SessionState {
+            company: session.0,
+            status: session.1,
+            current_phase: session.2,
+            phase_outputs: outputs,
+        })
+    }
+
+    /// Gets recent session history
+    pub fn get_session_history(&self, limit: usize) -> Result<Vec<SessionSummary>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, company, created_at, updated_at, status
+             FROM sessions
+             ORDER BY created_at DESC
+             LIMIT ?1"
+        )?;
+
+        let sessions = stmt.query_map(
+            params![limit],
+            |row| {
+                Ok(SessionSummary {
+                    session_id: row.get(0)?,
+                    company: row.get(1)?,
+                    created_at: row.get(2)?,
+                    updated_at: row.get(3)?,
+                    status: row.get(4)?,
+                })
+            }
+        )?
+        .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(sessions)
+    }
+
+    /// Deletes sessions older than specified days
+    pub fn cleanup_old_sessions(&self, days: u32) -> Result<usize> {
+        let cutoff = chrono::Utc::now().timestamp() - (days as i64 * 86400);
+
+        let deleted = self.conn.execute(
+            "DELETE FROM sessions WHERE created_at < ?1",
+            params![cutoff],
+        )?;
+
+        Ok(deleted)
+    }
+}
+
+#[derive(Debug)]
+pub struct SessionState {
+    pub company: String,
+    pub status: String,
+    pub current_phase: Option<String>,
+    pub phase_outputs: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionSummary {
+    pub session_id: String,
+    pub company: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub status: String,
+}
+```
+
+### 5.2 Database Schema
+```sql
+-- sessions table
+CREATE TABLE IF NOT EXISTS sessions (
+    id TEXT PRIMARY KEY,
+    company TEXT NOT NULL,
+    status TEXT NOT NULL,  -- 'running', 'completed', 'failed'
+    current_phase TEXT,
+    created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+    updated_at INTEGER NOT NULL
+);
+
+-- phase_outputs table
+CREATE TABLE IF NOT EXISTS phase_outputs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    phase_id TEXT NOT NULL,
+    output_json TEXT NOT NULL,
+    completed_at INTEGER NOT NULL,
+    FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
+);
+
+-- llm_calls table (cost tracking)
+CREATE TABLE IF NOT EXISTS llm_calls (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT,
+    phase_id TEXT,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    tokens_in INTEGER NOT NULL,
+    tokens_out INTEGER NOT NULL,
+    cost_usd REAL NOT NULL,
+    latency_ms INTEGER NOT NULL,
+    timestamp INTEGER NOT NULL,
+    FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_sessions_created ON sessions(created_at);
+CREATE INDEX IF NOT EXISTS idx_phase_outputs_session ON phase_outputs(session_id);
+CREATE INDEX IF NOT EXISTS idx_llm_calls_session ON llm_calls(session_id);
+```
+
+---
+
+## 6. Performance Requirements
+
+| Interface | Operation | Target Latency | Priority |
+|-----------|-----------|---------------|----------|
+| ToolRegistry::execute | Tool API call | < 5s | HIGH |
+| LLMClient::generate | LLM generation | < 30s | CRITICAL |
+| QualityGates::validate | Validation check | < 100ms | HIGH |
+| StateManager::save_session | DB write | < 50ms | MEDIUM |
+| StateManager::load_session | DB read | < 100ms | HIGH |
+
+---
+
+## 7. Error Propagation Strategy
+
+All component interfaces use `anyhow::Result<T>` for error propagation:
+
+```rust
+// AgentOrchestrator calls components
+pub async fn execute_phase(&mut self, phase: &Phase) -> Result<()> {
+    // Tool execution error propagates up
+    let tool_output = self.tool_registry.execute("search_tool", args).await?;
+
+    // LLM error propagates up
+    let llm_output = self.llm_client.generate(request).await?;
+
+    // Quality gate error handled specially
+    match self.quality_validator.validate(&phase.id, &llm_output) {
+        ValidationResult { passed: false, message, .. } => {
+            // Decide whether to retry or fail
+            anyhow::bail!("Quality gate failed: {}", message);
+        }
+        _ => {}
+    }
+
+    // State persistence error propagates up
+    self.state_manager.save_phase_output(&session_id, &phase.id, &llm_output)?;
+
+    Ok(())
+}
+```
+
+---
+
+## 8. Traceability Matrix
+
+| L1 Component Spec | Interface Definition | Implementation Location |
+|-------------------|---------------------|------------------------|
+| ToolRegistry (Section 6.2) | Tool trait, execute method | L2-ICD-03 Section 2 |
+| LLMClient (Section 6.3) | LLMRequest/Response, generate | L2-ICD-03 Section 3 |
+| QualityGates (Section 6.4) | ValidationResult, validate | L2-ICD-03 Section 4 |
+| StateManager (Section 6.5) | save_session, load_session | L2-ICD-03 Section 5 |
+
+---
+
+**Document Status:** Complete
+**Interface Coverage:** All component-to-component interfaces defined
+**Next Phase:** L3-CDD (Component Design Documents)

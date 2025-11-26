@@ -1,0 +1,386 @@
+# L1-SAD: System Architecture Document
+## Fullintel Sales Intelligence Generator
+
+**Document ID:** L1-SAD-FULLINTEL-001
+**Version:** 1.0
+**Date:** 2025-11-19
+**Status:** Ready for Review
+**Timeline:** Implement TODAY
+
+---
+
+## 1. Mission Intent
+
+Build a **desktop application** that automates sales research for Fullintel sales team, generating ready-to-use opportunity briefs in under 5 minutes instead of 2-4 hours of manual work.
+
+**Success Criteria:**
+- ✅ Research brief generated in < 5 minutes
+- ✅ Quality gates ensure no generic/placeholder content
+- ✅ Cost per brief < $0.10
+- ✅ Desktop app runs offline (cached data)
+- ✅ One-click export to PDF/clipboard
+
+---
+
+## 2. System Overview
+
+### 2.1 High-Level Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│              TAURI DESKTOP APP                      │
+│                                                     │
+│  ┌──────────────────────────────────────────────┐  │
+│  │         REACT FRONTEND (TypeScript)          │  │
+│  │  ┌────────┐  ┌─────────┐  ┌──────────────┐  │  │
+│  │  │ Setup  │  │Progress │  │   Results    │  │  │
+│  │  │ Screen │→ │ Screen  │→ │   Viewer     │  │  │
+│  │  └────────┘  └─────────┘  └──────────────┘  │  │
+│  └──────────────────┬───────────────────────────┘  │
+│                     │ Tauri IPC                    │
+│  ┌──────────────────▼───────────────────────────┐  │
+│  │          RUST BACKEND                        │  │
+│  │  ┌──────────────┐  ┌────────────────────┐   │  │
+│  │  │   Manifest   │  │  Agent Orchestrator│   │  │
+│  │  │    Parser    │  │   (5-phase runner) │   │  │
+│  │  └──────────────┘  └─────────┬──────────┘   │  │
+│  │                              │               │  │
+│  │  ┌────────┬──────────┬──────▼─────┬───────┐ │  │
+│  │  │  Tool  │   LLM    │  Quality   │SQLite │ │  │
+│  │  │Registry│  Client  │   Gates    │ State │ │  │
+│  │  └────────┴──────────┴────────────┴───────┘ │  │
+│  └──────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────┘
+```
+
+### 2.2 Core Components
+
+| Component | Responsibility | Atomic Level |
+|-----------|---------------|--------------|
+| **ManifestParser** | Parse/validate YAML workflow | ATOM |
+| **AgentOrchestrator** | Execute 5-phase pipeline | COMPOUND |
+| **ToolRegistry** | Manage external API tools | MOLECULE |
+| **LLMClient** | Multi-provider LLM calls | MOLECULE |
+| **QualityGates** | Validate phase outputs | MOLECULE |
+| **StateManager** | SQLite persistence | MOLECULE |
+| **UIComponents** | React screens | COMPOUND |
+
+---
+
+## 3. Functional Requirements
+
+### REQ-SYS-001: Company Research Execution
+**Priority:** CRITICAL
+**Description:** User provides company name → system executes 5-phase workflow → generates opportunity brief
+**Acceptance Criteria:**
+- Input: Company name (text)
+- Output: Markdown brief (FULLINTEL OPPORTUNITY BRIEF format)
+- Time: < 5 minutes end-to-end
+- Success Rate: > 95%
+
+### REQ-SYS-002: Multi-LLM Support
+**Priority:** HIGH
+**Description:** Support Claude, Gemini, DeepSeek with automatic fallback
+**Acceptance Criteria:**
+- Claude primary for Phase 5
+- DeepSeek for Phases 1-3 (cost optimization)
+- Fallback to Claude if DeepSeek fails
+- Model selection configurable
+
+### REQ-SYS-003: Tool Integration
+**Priority:** HIGH
+**Description:** Integrate external APIs for data gathering
+**Acceptance Criteria:**
+- Tavily API for web search
+- NewsAPI for news articles
+- Manual input fallback for all tools
+- Graceful degradation if APIs unavailable
+
+### REQ-SYS-004: Quality Assurance
+**Priority:** CRITICAL
+**Description:** Enforce quality gates before completing
+**Acceptance Criteria:**
+- Block completion if quality gates fail
+- Show specific failure reasons
+- Allow regeneration or manual edit
+- No generic/placeholder text in final output
+
+### REQ-SYS-005: State Persistence
+**Priority:** HIGH
+**Description:** Save/resume research sessions
+**Acceptance Criteria:**
+- Auto-save every phase completion
+- Resume from last successful phase on crash
+- View past research history
+- Delete sessions older than 90 days (privacy)
+
+### REQ-SYS-006: Export Capabilities
+**Priority:** MEDIUM
+**Description:** Export results in multiple formats
+**Acceptance Criteria:**
+- Copy to clipboard (one-click)
+- Export as PDF
+- Export as Markdown file
+- Include all sections from template
+
+### REQ-SYS-007: Configuration Management
+**Priority:** HIGH
+**Description:** Secure API key storage and settings
+**Acceptance Criteria:**
+- API keys encrypted (Windows Credential Manager)
+- Settings persist across restarts
+- Model preferences configurable
+- Cost tracking visible
+
+---
+
+## 4. Non-Functional Requirements
+
+### NFR-001: Performance
+- Phase execution: < 60 seconds each
+- Total workflow: < 5 minutes
+- UI responsiveness: < 100ms
+- LLM streaming: Real-time updates
+
+### NFR-002: Reliability
+- Uptime: 99%+ (local app)
+- Error recovery: Auto-retry 3x
+- Data persistence: No data loss on crash
+- Graceful degradation: All tools have fallbacks
+
+### NFR-003: Security
+- API keys: Encrypted storage
+- Input sanitization: Prevent injection
+- Rate limiting: 10 LLM calls/min max
+- Data retention: 90-day auto-delete
+
+### NFR-004: Usability
+- Setup time: < 2 minutes (first run)
+- Learning curve: < 10 minutes
+- Error messages: Actionable, specific
+- Progress indication: Real-time
+
+### NFR-005: Maintainability
+- Code coverage: > 80%
+- Documentation: All public APIs
+- Modular design: Easy to swap tools/LLMs
+- Logging: Debug mode available
+
+### NFR-006: Cost
+- Cost per brief: < $0.10 (LLM + tools)
+- Free tier tools: Where possible
+- Cost tracking: Visible to user
+- Budget alerts: Warn at $10/month
+
+---
+
+## 5. System Interfaces
+
+### 5.1 External APIs
+
+| API | Purpose | Phase | Cost | Fallback |
+|-----|---------|-------|------|----------|
+| **Tavily** | Web search | 1, 2 | $0.001/search | LLM knowledge |
+| **NewsAPI** | News articles | 2 | Free tier | Google News |
+| **Claude API** | LLM calls | All | $0.025/brief | DeepSeek |
+| **DeepSeek API** | LLM calls | 1-3 | $0.001/brief | Claude |
+
+### 5.2 Data Schemas
+
+**CompanyProfile:**
+```typescript
+{
+  company_name: string;
+  industry_classification: string;
+  revenue_tier: string;
+  geographic_footprint: string;
+  communications_leader_name?: string;
+  communications_leader_title?: string;
+}
+```
+
+**SituationAnalysis:**
+```typescript
+{
+  scenario_type: 'CRISIS' | 'LAUNCH' | 'MA' | 'REGULATORY' | 'COMPETITIVE' | 'EXECUTIVE';
+  coverage_volume: number;
+  coverage_momentum: 'increasing' | 'stable' | 'declining';
+  urgency_level: 'HIGH' | 'MEDIUM' | 'LOW';
+}
+```
+
+---
+
+## 6. Component Specifications
+
+### 6.1 AgentOrchestrator (COMPOUND)
+**Responsibility:** Execute 5-phase workflow with dependency tracking
+**Interfaces:**
+- `run_workflow(company: String) -> Result<String>`
+- `execute_phase(phase: &Phase) -> Result<String>`
+- `check_dependencies(phase: &Phase) -> bool`
+
+**Dependencies:**
+- ManifestParser
+- ToolRegistry
+- LLMClient
+- QualityGates
+- StateManager
+
+### 6.2 ToolRegistry (MOLECULE)
+**Responsibility:** Manage and execute external tools
+**Interfaces:**
+- `register(name: String, tool: Box<dyn Tool>)`
+- `execute(name: &str, args: Value) -> Result<String>`
+- `list_available() -> Vec<String>`
+
+**Registered Tools:**
+- `search_tool` → TavilySearch
+- `news_search_tool` → NewsAPISearch
+- `manual_input_tool` → PromptUser
+
+### 6.3 LLMClient (MOLECULE)
+**Responsibility:** Multi-provider LLM orchestration
+**Interfaces:**
+- `generate(req: LLMRequest) -> Result<String>`
+- `stream(req: LLMRequest) -> Stream<String>`
+
+**Providers:**
+- Anthropic (Claude)
+- Google (Gemini)
+- DeepSeek
+
+### 6.4 QualityGates (MOLECULE)
+**Responsibility:** Validate phase outputs against business rules
+**Interfaces:**
+- `validate(phase_id: &str, output: &str) -> ValidationResult`
+
+**Gates:**
+- Coverage quantification check
+- Generic text detection
+- ROI calculation verification
+- Case study presence
+
+---
+
+## 7. Data Flow
+
+### 7.1 Happy Path
+
+```
+User enters "TechCorp"
+  ↓
+Agent loads manifest
+  ↓
+Phase 1: Context & Firmographics
+  ├─ Tool: TavilySearch("TechCorp revenue industry")
+  ├─ LLM: Extract structured CompanyProfile
+  └─ Store: context["CompanyProfile"] = {...}
+  ↓
+Phase 2: Situation Analysis
+  ├─ Tool: NewsAPISearch("TechCorp", last_14_days)
+  ├─ LLM: Classify scenario, analyze momentum
+  ├─ QualityGate: Check coverage_volume quantified
+  └─ Store: context["SituationAnalysis"] = {...}
+  ↓
+Phase 3: Comms Team Intelligence
+  ├─ Tool: ManualInput("Enter VP of Comms name")
+  ├─ LLM: Map scenario → pain points
+  └─ Store: context["pain_points_list"] = [...]
+  ↓
+Phase 4: Solution Matching
+  ├─ Logic: scenario_type → solution from logic_map
+  ├─ Tool: CaseStudySearch(scenario_type)
+  └─ Store: context["solution_package"] = {...}
+  ↓
+Phase 5: Brief Generation
+  ├─ LLM: Claude Sonnet with full context
+  ├─ QualityGate: No generic text, ROI present, case study included
+  └─ Output: markdown_file
+  ↓
+Display results → Copy/Export
+```
+
+### 7.2 Error Handling
+
+```
+Tool API fails
+  → Retry 3x (exponential backoff)
+  → If still fails: Fallback to manual input or skip
+
+LLM API fails
+  → Try fallback provider
+  → If all fail: Save state, notify user, allow resume
+
+Quality Gate fails
+  → Block completion
+  → Show failure reason
+  → Offer regenerate or manual edit
+```
+
+---
+
+## 8. Deployment Architecture
+
+### 8.1 Desktop Application (Tauri)
+- **Platform:** Windows 10+, macOS 11+, Linux (Ubuntu 20.04+)
+- **Installer:** MSI (Windows), DMG (macOS), AppImage (Linux)
+- **Auto-update:** Tauri updater plugin
+- **Size:** < 50MB installed
+
+### 8.2 Data Storage
+- **Config:** `%APPDATA%/fullintel-agent/config.json`
+- **Database:** `%APPDATA%/fullintel-agent/sessions.db` (SQLite)
+- **Logs:** `%APPDATA%/fullintel-agent/logs/` (rotating, 7-day retention)
+
+---
+
+## 9. Testing Strategy
+
+### 9.1 Unit Tests (80% coverage target)
+- All public functions in Rust modules
+- Mock external APIs
+- Test quality gate logic
+
+### 9.2 Integration Tests
+- Full 5-phase workflow with mocked tools
+- LLM API integration (record/replay)
+- Database persistence
+
+### 9.3 E2E Tests
+- Happy path: Company input → Brief output
+- Error scenarios: API failures, quality gate failures
+- Resume from crash
+
+---
+
+## 10. Success Metrics
+
+| Metric | Target | Measurement |
+|--------|--------|-------------|
+| Time to Brief | < 5 min | Average workflow duration |
+| Quality Gate Pass Rate | > 90% | First-time pass percentage |
+| Cost per Brief | < $0.10 | LLM + tool API costs |
+| User Satisfaction | > 4/5 | Post-use survey |
+| Error Rate | < 5% | Workflows with unhandled errors |
+
+---
+
+## 11. Timeline (TODAY)
+
+- ✅ ULTRATHINK, RESEARCH, NOTES: Complete
+- 🔄 PLAN (L1-SAD): In progress
+- ⏳ PRE-CODE: 30 min
+- ⏳ MANIFEST: 30 min
+- ⏳ TESTING PLAN: 30 min
+- ⏳ PRE-IMPLEMENTATION REVIEW: 15 min
+- ⏳ IMPLEMENT: 3-4 hours
+- ⏳ EXECUTE TESTS: 1 hour
+- ⏳ POST-IMPLEMENTATION REVIEW: 15 min
+
+**Total:** ~6-7 hours to working prototype
+
+---
+
+**Document Status:** Ready for Implementation
+**Next:** Create PRE-CODE specs (component details)

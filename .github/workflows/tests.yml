@@ -1,0 +1,104 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: src-tauri/target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build tests
+        working-directory: ./src-tauri
+        run: cargo build --tests --verbose
+
+      - name: Run Battery 1 (Unit Tests)
+        working-directory: ./src-tauri
+        run: cargo test --test battery1_unit_strategic --verbose
+
+      - name: Run Battery 2 (Integration Tests)
+        working-directory: ./src-tauri
+        run: cargo test --test battery2_integration_strategic --verbose
+
+      - name: Run Battery 3 (System Tests)
+        working-directory: ./src-tauri
+        run: cargo test --test battery3_system_strategic --verbose
+
+      - name: Run all inline tests
+        working-directory: ./src-tauri
+        run: cargo test --lib --verbose
+
+  clippy:
+    name: Clippy (Linting)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          components: clippy
+          override: true
+
+      - name: Run Clippy
+        working-directory: ./src-tauri
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+  fmt:
+    name: Rustfmt (Formatting)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          components: rustfmt
+          override: true
+
+      - name: Check formatting
+        working-directory: ./src-tauri
+        run: cargo fmt -- --check

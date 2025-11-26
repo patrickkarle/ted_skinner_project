@@ -1,0 +1,1331 @@
+# L3-CDD-03: LLMClient Component Design Document
+
+**Document ID:** L3-CDD-LLM-001
+**Component Name:** LLMClient
+**Version:** 1.0
+**Date:** 2025-11-19
+**Parent:** L2-ICD-03-ComponentInterfaces.md
+**Traceability:** L1-SAD REQ-SYS-002 (Multi-LLM Support), MO-003 (Cost Efficiency)
+
+---
+
+## 1. Component Overview
+
+### 1.1 Purpose
+Provides unified interface for multiple LLM providers (Anthropic Claude, Google Gemini, DeepSeek) with automatic routing, cost tracking, and error handling.
+
+### 1.2 Responsibilities
+- Route requests to appropriate provider based on model name
+- Handle HTTP communication with provider APIs
+- Track token usage and calculate costs
+- Implement retry logic with exponential backoff
+- Validate API responses against expected schemas
+- Manage API key security (read from environment)
+
+### 1.3 Integration Points
+| Component | Interface | Direction |
+|-----------|-----------|-----------|
+| AgentOrchestrator | `generate(LLMRequest)` | ← Receives requests |
+| Environment | API keys (env vars) | ← Reads credentials |
+| File System | Response logging | → Writes debug logs |
+| HTTP Clients | Provider APIs | → Sends requests |
+
+---
+
+## 2. File Structure
+
+```
+src-tauri/src/
+├── llm/
+│   ├── mod.rs                    # Public API + LLMClient struct
+│   ├── providers/
+│   │   ├── mod.rs                # Provider trait + registry
+│   │   ├── anthropic.rs          # Anthropic Claude provider
+│   │   ├── gemini.rs             # Google Gemini provider
+│   │   └── deepseek.rs           # DeepSeek provider
+│   ├── cost.rs                   # Token counting + cost calculation
+│   ├── retry.rs                  # Exponential backoff retry logic
+│   └── types.rs                  # LLMRequest, LLMResponse, Error types
+```
+
+### 2.1 Module Dependencies
+```rust
+// llm/mod.rs
+mod providers;
+mod cost;
+mod retry;
+mod types;
+
+pub use types::{LLMRequest, LLMResponse, LLMError};
+pub use self::LLMClient;
+```
+
+---
+
+## 3. Data Structures
+
+### 3.1 Core Types
+
+```rust
+use serde::{Deserialize, Serialize};
+use anyhow::Result;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LLMRequest {
+    /// Model identifier (e.g., "claude-3-5-sonnet", "gemini-2.0-flash", "deepseek-chat")
+    pub model: String,
+
+    /// User prompt
+    pub prompt: String,
+
+    /// Optional system instruction (context)
+    pub system: Option<String>,
+
+    /// Maximum tokens to generate
+    pub max_tokens: usize,
+
+    /// Temperature (0.0-1.0, creativity vs determinism)
+    pub temperature: f64,
+
+    /// Optional stop sequences
+    pub stop_sequences: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LLMResponse {
+    /// Generated text content
+    pub content: String,
+
+    /// Model used for generation
+    pub model: String,
+
+    /// Token usage statistics
+    pub usage: TokenUsage,
+
+    /// Estimated cost in USD
+    pub cost_usd: f64,
+
+    /// Request duration in milliseconds
+    pub duration_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TokenUsage {
+    pub prompt_tokens: usize,
+    pub completion_tokens: usize,
+    pub total_tokens: usize,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum LLMError {
+    #[error("Invalid API key for provider: {0}")]
+    InvalidApiKey(String),
+
+    #[error("Provider API error: {0}")]
+    ApiError(String),
+
+    #[error("Rate limit exceeded (retry after {0}s)")]
+    RateLimitExceeded(u64),
+
+    #[error("Model not supported: {0}")]
+    UnsupportedModel(String),
+
+    #[error("Response parsing failed: {0}")]
+    ParseError(String),
+
+    #[error("Network error: {0}")]
+    NetworkError(String),
+}
+```
+
+---
+
+## 4. LLMClient Implementation
+
+### 4.1 Main Struct
+
+```rust
+use std::collections::HashMap;
+use reqwest::Client;
+use std::sync::Arc;
+
+pub struct LLMClient {
+    /// HTTP client (connection pooling)
+    http_client: Client,
+
+    /// API keys per provider
+    api_keys: HashMap<String, String>,
+
+    /// Provider-specific clients
+    providers: HashMap<String, Arc<dyn LLMProvider>>,
+
+    /// Request/response log
+    request_log: Vec<LLMLogEntry>,
+}
+
+#[derive(Debug, Clone)]
+struct LLMLogEntry {
+    pub model: String,
+    pub started_at: u64,
+    pub completed_at: Option<u64>,
+    pub cost_usd: f64,
+    pub success: bool,
+    pub error: Option<String>,
+}
+```
+
+### 4.2 Constructor
+
+```rust
+impl LLMClient {
+    pub fn new() -> Result<Self> {
+        // Load API keys from environment
+        let anthropic_key = std::env::var("ANTHROPIC_API_KEY")
+            .map_err(|_| LLMError::InvalidApiKey("ANTHROPIC_API_KEY not set".into()))?;
+        let google_key = std::env::var("GOOGLE_API_KEY")
+            .map_err(|_| LLMError::InvalidApiKey("GOOGLE_API_KEY not set".into()))?;
+        let deepseek_key = std::env::var("DEEPSEEK_API_KEY")
+            .map_err(|_| LLMError::InvalidApiKey("DEEPSEEK_API_KEY not set".into()))?;
+
+        let mut api_keys = HashMap::new();
+        api_keys.insert("anthropic".to_string(), anthropic_key.clone());
+        api_keys.insert("google".to_string(), google_key.clone());
+        api_keys.insert("deepseek".to_string(), deepseek_key.clone());
+
+        // Initialize HTTP client with timeouts
+        let http_client = Client::builder()
+            .timeout(std::time::Duration::from_secs(120))
+            .build()?;
+
+        // Register providers
+        let mut providers: HashMap<String, Arc<dyn LLMProvider>> = HashMap::new();
+        providers.insert(
+            "anthropic".to_string(),
+            Arc::new(AnthropicProvider::new(anthropic_key, http_client.clone()))
+        );
+        providers.insert(
+            "google".to_string(),
+            Arc::new(GeminiProvider::new(google_key, http_client.clone()))
+        );
+        providers.insert(
+            "deepseek".to_string(),
+            Arc::new(DeepSeekProvider::new(deepseek_key, http_client.clone()))
+        );
+
+        Ok(Self {
+            http_client,
+            api_keys,
+            providers,
+            request_log: Vec::new(),
+        })
+    }
+}
+```
+
+### 4.3 Main Generation Method
+
+```rust
+impl LLMClient {
+    /// Generate text using specified model
+    pub async fn generate(&mut self, request: LLMRequest) -> Result<LLMResponse> {
+        let started_at = Self::current_timestamp_ms();
+
+        // Route to provider based on model name
+        let provider_name = self.detect_provider(&request.model)?;
+        let provider = self.providers
+            .get(provider_name)
+            .ok_or_else(|| LLMError::UnsupportedModel(request.model.clone()))?
+            .clone();
+
+        // Execute with retry logic
+        let result = retry::with_exponential_backoff(
+            || provider.generate(request.clone()),
+            3, // max_retries
+            std::time::Duration::from_secs(2), // initial_delay
+        ).await;
+
+        let completed_at = Self::current_timestamp_ms();
+
+        match result {
+            Ok(response) => {
+                // Log success
+                self.request_log.push(LLMLogEntry {
+                    model: request.model.clone(),
+                    started_at,
+                    completed_at: Some(completed_at),
+                    cost_usd: response.cost_usd,
+                    success: true,
+                    error: None,
+                });
+
+                Ok(response)
+            }
+            Err(e) => {
+                // Log failure
+                self.request_log.push(LLMLogEntry {
+                    model: request.model.clone(),
+                    started_at,
+                    completed_at: Some(completed_at),
+                    cost_usd: 0.0,
+                    success: false,
+                    error: Some(e.to_string()),
+                });
+
+                Err(e)
+            }
+        }
+    }
+
+    /// Detect provider from model name
+    fn detect_provider(&self, model: &str) -> Result<&str> {
+        if model.starts_with("claude") {
+            Ok("anthropic")
+        } else if model.starts_with("gemini") {
+            Ok("google")
+        } else if model.starts_with("deepseek") {
+            Ok("deepseek")
+        } else {
+            Err(LLMError::UnsupportedModel(model.to_string()).into())
+        }
+    }
+
+    /// Get total cost across all logged requests
+    pub fn total_cost(&self) -> f64 {
+        self.request_log.iter().map(|e| e.cost_usd).sum()
+    }
+
+    /// Get request count per model
+    pub fn request_counts(&self) -> HashMap<String, usize> {
+        let mut counts = HashMap::new();
+        for entry in &self.request_log {
+            *counts.entry(entry.model.clone()).or_insert(0) += 1;
+        }
+        counts
+    }
+
+    fn current_timestamp_ms() -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64
+    }
+}
+```
+
+---
+
+## 5. Provider Trait
+
+### 5.1 Trait Definition
+
+```rust
+// llm/providers/mod.rs
+use async_trait::async_trait;
+use anyhow::Result;
+use super::types::{LLMRequest, LLMResponse};
+
+#[async_trait]
+pub trait LLMProvider: Send + Sync {
+    /// Provider name (e.g., "anthropic", "google", "deepseek")
+    fn name(&self) -> &str;
+
+    /// Generate text from prompt
+    async fn generate(&self, request: LLMRequest) -> Result<LLMResponse>;
+
+    /// Check if model is supported by this provider
+    fn supports_model(&self, model: &str) -> bool;
+}
+```
+
+---
+
+## 6. Provider Implementations
+
+### 6.1 Anthropic Provider
+
+```rust
+// llm/providers/anthropic.rs
+use reqwest::Client;
+use serde_json::json;
+use super::{LLMProvider, LLMRequest, LLMResponse, TokenUsage};
+
+pub struct AnthropicProvider {
+    api_key: String,
+    http_client: Client,
+}
+
+impl AnthropicProvider {
+    pub fn new(api_key: String, http_client: Client) -> Self {
+        Self { api_key, http_client }
+    }
+}
+
+#[async_trait]
+impl LLMProvider for AnthropicProvider {
+    fn name(&self) -> &str {
+        "anthropic"
+    }
+
+    async fn generate(&self, request: LLMRequest) -> Result<LLMResponse> {
+        let started_at = std::time::Instant::now();
+
+        // Build request body
+        let mut body = json!({
+            "model": request.model,
+            "max_tokens": request.max_tokens,
+            "temperature": request.temperature,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": request.prompt
+                }
+            ]
+        });
+
+        if let Some(system) = request.system {
+            body["system"] = json!(system);
+        }
+
+        if let Some(stop) = request.stop_sequences {
+            body["stop_sequences"] = json!(stop);
+        }
+
+        // Send HTTP request
+        let response = self.http_client
+            .post("https://api.anthropic.com/v1/messages")
+            .header("x-api-key", &self.api_key)
+            .header("anthropic-version", "2023-06-01")
+            .header("content-type", "application/json")
+            .json(&body)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            return Err(LLMError::ApiError(format!(
+                "Anthropic API error: {}",
+                error_text
+            )).into());
+        }
+
+        // Parse response
+        let response_json: serde_json::Value = response.json().await?;
+
+        let content = response_json["content"][0]["text"]
+            .as_str()
+            .ok_or_else(|| LLMError::ParseError("Missing 'content[0].text'".into()))?
+            .to_string();
+
+        let usage = TokenUsage {
+            prompt_tokens: response_json["usage"]["input_tokens"]
+                .as_u64()
+                .unwrap_or(0) as usize,
+            completion_tokens: response_json["usage"]["output_tokens"]
+                .as_u64()
+                .unwrap_or(0) as usize,
+            total_tokens: 0, // calculated below
+        };
+
+        let total_tokens = usage.prompt_tokens + usage.completion_tokens;
+        let usage = TokenUsage { total_tokens, ..usage };
+
+        // Calculate cost (example pricing for Claude 3.5 Sonnet)
+        // $3 per million input tokens, $15 per million output tokens
+        let cost_usd = (usage.prompt_tokens as f64 * 3.0 / 1_000_000.0)
+            + (usage.completion_tokens as f64 * 15.0 / 1_000_000.0);
+
+        Ok(LLMResponse {
+            content,
+            model: request.model,
+            usage,
+            cost_usd,
+            duration_ms: started_at.elapsed().as_millis() as u64,
+        })
+    }
+
+    fn supports_model(&self, model: &str) -> bool {
+        model.starts_with("claude")
+    }
+}
+```
+
+### 6.2 Gemini Provider
+
+```rust
+// llm/providers/gemini.rs
+pub struct GeminiProvider {
+    api_key: String,
+    http_client: Client,
+}
+
+impl GeminiProvider {
+    pub fn new(api_key: String, http_client: Client) -> Self {
+        Self { api_key, http_client }
+    }
+}
+
+#[async_trait]
+impl LLMProvider for GeminiProvider {
+    fn name(&self) -> &str {
+        "google"
+    }
+
+    async fn generate(&self, request: LLMRequest) -> Result<LLMResponse> {
+        let started_at = std::time::Instant::now();
+
+        // Build prompt with system instruction if present
+        let full_prompt = if let Some(system) = &request.system {
+            format!("{}\n\n{}", system, request.prompt)
+        } else {
+            request.prompt.clone()
+        };
+
+        // Build request body
+        let body = json!({
+            "contents": [
+                {
+                    "parts": [
+                        { "text": full_prompt }
+                    ]
+                }
+            ],
+            "generationConfig": {
+                "maxOutputTokens": request.max_tokens,
+                "temperature": request.temperature,
+            }
+        });
+
+        // Send HTTP request
+        let url = format!(
+            "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
+            request.model, self.api_key
+        );
+
+        let response = self.http_client
+            .post(&url)
+            .header("content-type", "application/json")
+            .json(&body)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            return Err(LLMError::ApiError(format!(
+                "Gemini API error: {}",
+                error_text
+            )).into());
+        }
+
+        // Parse response
+        let response_json: serde_json::Value = response.json().await?;
+
+        let content = response_json["candidates"][0]["content"]["parts"][0]["text"]
+            .as_str()
+            .ok_or_else(|| LLMError::ParseError("Missing 'candidates[0].content.parts[0].text'".into()))?
+            .to_string();
+
+        // Gemini doesn't always provide token counts - estimate
+        let prompt_tokens = full_prompt.split_whitespace().count();
+        let completion_tokens = content.split_whitespace().count();
+        let total_tokens = prompt_tokens + completion_tokens;
+
+        let usage = TokenUsage {
+            prompt_tokens,
+            completion_tokens,
+            total_tokens,
+        };
+
+        // Calculate cost (example pricing for Gemini 2.0 Flash)
+        // $0.075 per million input tokens, $0.30 per million output tokens
+        let cost_usd = (usage.prompt_tokens as f64 * 0.075 / 1_000_000.0)
+            + (usage.completion_tokens as f64 * 0.30 / 1_000_000.0);
+
+        Ok(LLMResponse {
+            content,
+            model: request.model,
+            usage,
+            cost_usd,
+            duration_ms: started_at.elapsed().as_millis() as u64,
+        })
+    }
+
+    fn supports_model(&self, model: &str) -> bool {
+        model.starts_with("gemini")
+    }
+}
+```
+
+### 6.3 DeepSeek Provider
+
+```rust
+// llm/providers/deepseek.rs
+pub struct DeepSeekProvider {
+    api_key: String,
+    http_client: Client,
+}
+
+impl DeepSeekProvider {
+    pub fn new(api_key: String, http_client: Client) -> Self {
+        Self { api_key, http_client }
+    }
+}
+
+#[async_trait]
+impl LLMProvider for DeepSeekProvider {
+    fn name(&self) -> &str {
+        "deepseek"
+    }
+
+    async fn generate(&self, request: LLMRequest) -> Result<LLMResponse> {
+        let started_at = std::time::Instant::now();
+
+        // Build messages array
+        let mut messages = Vec::new();
+
+        if let Some(system) = &request.system {
+            messages.push(json!({
+                "role": "system",
+                "content": system
+            }));
+        }
+
+        messages.push(json!({
+            "role": "user",
+            "content": request.prompt
+        }));
+
+        // Build request body (OpenAI-compatible API)
+        let body = json!({
+            "model": request.model,
+            "messages": messages,
+            "max_tokens": request.max_tokens,
+            "temperature": request.temperature,
+        });
+
+        // Send HTTP request
+        let response = self.http_client
+            .post("https://api.deepseek.com/v1/chat/completions")
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("content-type", "application/json")
+            .json(&body)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            return Err(LLMError::ApiError(format!(
+                "DeepSeek API error: {}",
+                error_text
+            )).into());
+        }
+
+        // Parse response
+        let response_json: serde_json::Value = response.json().await?;
+
+        let content = response_json["choices"][0]["message"]["content"]
+            .as_str()
+            .ok_or_else(|| LLMError::ParseError("Missing 'choices[0].message.content'".into()))?
+            .to_string();
+
+        let usage = TokenUsage {
+            prompt_tokens: response_json["usage"]["prompt_tokens"]
+                .as_u64()
+                .unwrap_or(0) as usize,
+            completion_tokens: response_json["usage"]["completion_tokens"]
+                .as_u64()
+                .unwrap_or(0) as usize,
+            total_tokens: response_json["usage"]["total_tokens"]
+                .as_u64()
+                .unwrap_or(0) as usize,
+        };
+
+        // Calculate cost (example pricing for DeepSeek Chat)
+        // $0.14 per million input tokens, $0.28 per million output tokens
+        let cost_usd = (usage.prompt_tokens as f64 * 0.14 / 1_000_000.0)
+            + (usage.completion_tokens as f64 * 0.28 / 1_000_000.0);
+
+        Ok(LLMResponse {
+            content,
+            model: request.model,
+            usage,
+            cost_usd,
+            duration_ms: started_at.elapsed().as_millis() as u64,
+        })
+    }
+
+    fn supports_model(&self, model: &str) -> bool {
+        model.starts_with("deepseek")
+    }
+}
+```
+
+---
+
+## 7. Retry Logic
+
+### 7.1 Exponential Backoff Implementation
+
+```rust
+// llm/retry.rs
+use std::time::Duration;
+use tokio::time::sleep;
+
+/// Retry async operation with exponential backoff
+pub async fn with_exponential_backoff<F, Fut, T>(
+    mut operation: F,
+    max_retries: usize,
+    initial_delay: Duration,
+) -> Result<T>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<T>>,
+{
+    let mut delay = initial_delay;
+
+    for attempt in 0..=max_retries {
+        match operation().await {
+            Ok(result) => return Ok(result),
+            Err(e) if attempt < max_retries => {
+                eprintln!(
+                    "Attempt {} failed: {}. Retrying in {:?}...",
+                    attempt + 1,
+                    e,
+                    delay
+                );
+                sleep(delay).await;
+                delay *= 2; // Exponential backoff
+            }
+            Err(e) => return Err(e),
+        }
+    }
+
+    unreachable!()
+}
+```
+
+---
+
+### 7.2 Rate Limiting
+
+Rate limiting prevents exceeding provider API rate limits using a token bucket algorithm.
+
+```rust
+// llm/rate_limiter.rs
+use std::time::{Duration, Instant};
+
+/// Token bucket rate limiter for API requests
+pub struct RateLimiter {
+    tokens: f64,              // Current token count
+    capacity: f64,            // Max tokens (RPM limit)
+    refill_rate: f64,         // Tokens per second (RPM / 60)
+    last_refill: Instant,     // Last refill timestamp
+}
+
+impl RateLimiter {
+    /// Create a new RateLimiter with specified requests-per-minute capacity
+    pub fn new(requests_per_minute: f64) -> Self {
+        Self {
+            tokens: requests_per_minute,
+            capacity: requests_per_minute,
+            refill_rate: requests_per_minute / 60.0,
+            last_refill: Instant::now(),
+        }
+    }
+
+    /// Try to acquire a token for a request
+    /// Returns Ok(()) if token acquired, Err(wait_duration) if rate limited
+    pub fn try_acquire(&mut self) -> Result<(), Duration> {
+        self.refill();
+
+        if self.tokens >= 1.0 {
+            self.tokens -= 1.0;
+            Ok(())
+        } else {
+            // Calculate wait time for next token
+            let wait_seconds = (1.0 - self.tokens) / self.refill_rate;
+            Err(Duration::from_secs_f64(wait_seconds))
+        }
+    }
+
+    /// Refill tokens based on elapsed time
+    fn refill(&mut self) {
+        let now = Instant::now();
+        let elapsed = now.duration_since(self.last_refill).as_secs_f64();
+        self.tokens = (self.tokens + elapsed * self.refill_rate).min(self.capacity);
+        self.last_refill = now;
+    }
+
+    /// Get current token count (for monitoring)
+    pub fn available_tokens(&self) -> f64 {
+        self.tokens
+    }
+}
+```
+
+**Integration with LLMClient:**
+```rust
+// In llm/client.rs
+pub struct LLMClient {
+    providers: HashMap<String, Box<dyn LLMProvider>>,
+    rate_limiters: HashMap<String, RateLimiter>, // provider_name → limiter
+    // ... existing fields
+}
+
+impl LLMClient {
+    pub fn new() -> Self {
+        let mut rate_limiters = HashMap::new();
+
+        // Configure rate limits per provider (from L1-SAD REQ-SYS-003)
+        rate_limiters.insert(
+            "anthropic".to_string(),
+            RateLimiter::new(50.0), // 50 RPM for Claude
+        );
+        rate_limiters.insert(
+            "google".to_string(),
+            RateLimiter::new(60.0), // 60 RPM for Gemini
+        );
+        rate_limiters.insert(
+            "deepseek".to_string(),
+            RateLimiter::new(100.0), // 100 RPM for DeepSeek
+        );
+
+        Self {
+            providers: HashMap::new(),
+            rate_limiters,
+            // ... initialize other fields
+        }
+    }
+
+    pub async fn generate(&self, request: LLMRequest) -> Result<LLMResponse> {
+        let provider_name = self.detect_provider(&request.model);
+
+        // Apply rate limiting BEFORE making request
+        if let Some(limiter) = self.rate_limiters.get_mut(provider_name) {
+            match limiter.try_acquire() {
+                Ok(()) => {
+                    // Token acquired, proceed with request
+                }
+                Err(wait_duration) => {
+                    // Rate limited - wait and retry
+                    eprintln!(
+                        "Rate limited by {} - waiting {:?}",
+                        provider_name, wait_duration
+                    );
+                    tokio::time::sleep(wait_duration).await;
+                    limiter.try_acquire()?; // Retry after waiting
+                }
+            }
+        }
+
+        // Proceed with provider request...
+        let provider = self.providers.get(provider_name)
+            .ok_or_else(|| LLMError::ProviderNotFound(provider_name.to_string()))?;
+
+        provider.generate(request).await
+    }
+}
+```
+
+**Testing:**
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_rate_limiter_basic() {
+        let mut limiter = RateLimiter::new(60.0); // 60 RPM = 1 per second
+
+        // Should acquire 60 tokens immediately
+        for _ in 0..60 {
+            assert!(limiter.try_acquire().is_ok());
+        }
+
+        // 61st request should be rate limited
+        assert!(limiter.try_acquire().is_err());
+    }
+
+    #[tokio::test]
+    async fn test_rate_limiter_refill() {
+        let mut limiter = RateLimiter::new(60.0);
+
+        // Exhaust tokens
+        for _ in 0..60 {
+            limiter.try_acquire().unwrap();
+        }
+
+        // Wait 1 second for refill
+        tokio::time::sleep(Duration::from_secs(1)).await;
+
+        // Should have ~1 token available now
+        assert!(limiter.try_acquire().is_ok());
+    }
+}
+```
+
+---
+
+### 7.3 Circuit Breaker
+
+Circuit breaker prevents cascading failures when a provider is consistently failing.
+
+```rust
+// llm/circuit_breaker.rs
+use std::time::{Duration, Instant};
+
+/// Circuit breaker states
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum CircuitState {
+    Closed,      // Normal operation, requests allowed
+    Open,        // Blocking all requests due to failures
+    HalfOpen,    // Allowing test request to check if provider recovered
+}
+
+/// Circuit breaker for LLM provider failure protection
+pub struct CircuitBreaker {
+    state: CircuitState,
+    failure_count: u32,
+    failure_threshold: u32,    // 5 consecutive failures trigger Open
+    success_count: u32,
+    success_threshold: u32,    // 2 consecutive successes close circuit
+    open_until: Option<Instant>,
+    timeout_duration: Duration, // 60 seconds in Open state
+}
+
+#[derive(Debug)]
+pub enum CircuitBreakerError {
+    Open,                           // Circuit is open, request rejected
+    RequestFailed(Box<dyn std::error::Error>), // Request failed, counted toward threshold
+}
+
+impl CircuitBreaker {
+    pub fn new() -> Self {
+        Self {
+            state: CircuitState::Closed,
+            failure_count: 0,
+            failure_threshold: 5,      // From L1-SAD REQ-SYS-004
+            success_count: 0,
+            success_threshold: 2,
+            open_until: None,
+            timeout_duration: Duration::from_secs(60),
+        }
+    }
+
+    /// Execute a function with circuit breaker protection
+    pub fn call<F, T>(&mut self, f: F) -> Result<T, CircuitBreakerError>
+    where
+        F: FnOnce() -> Result<T, Box<dyn std::error::Error>>,
+    {
+        // Check if circuit should transition from Open to HalfOpen
+        match self.state {
+            CircuitState::Open => {
+                if let Some(open_until) = self.open_until {
+                    if Instant::now() >= open_until {
+                        // Timeout expired, try half-open
+                        self.state = CircuitState::HalfOpen;
+                    } else {
+                        // Still in timeout period
+                        return Err(CircuitBreakerError::Open);
+                    }
+                }
+            }
+            CircuitState::HalfOpen | CircuitState::Closed => {
+                // Proceed with request
+            }
+        }
+
+        // Execute the function
+        match f() {
+            Ok(result) => {
+                self.on_success();
+                Ok(result)
+            }
+            Err(error) => {
+                self.on_failure();
+                Err(CircuitBreakerError::RequestFailed(error))
+            }
+        }
+    }
+
+    /// Record successful request
+    fn on_success(&mut self) {
+        self.failure_count = 0;
+
+        match self.state {
+            CircuitState::HalfOpen => {
+                self.success_count += 1;
+                if self.success_count >= self.success_threshold {
+                    // Provider recovered, close circuit
+                    self.state = CircuitState::Closed;
+                    self.success_count = 0;
+                }
+            }
+            CircuitState::Closed => {
+                // Normal operation
+            }
+            CircuitState::Open => {
+                unreachable!("Cannot succeed in Open state")
+            }
+        }
+    }
+
+    /// Record failed request
+    fn on_failure(&mut self) {
+        self.success_count = 0;
+        self.failure_count += 1;
+
+        if self.failure_count >= self.failure_threshold {
+            // Too many failures, open circuit
+            self.state = CircuitState::Open;
+            self.open_until = Some(Instant::now() + self.timeout_duration);
+        }
+    }
+
+    /// Get current circuit state (for monitoring)
+    pub fn state(&self) -> CircuitState {
+        self.state
+    }
+}
+```
+
+**Integration with LLMClient:**
+```rust
+// In llm/client.rs
+pub struct LLMClient {
+    providers: HashMap<String, Box<dyn LLMProvider>>,
+    rate_limiters: HashMap<String, RateLimiter>,
+    circuit_breakers: HashMap<String, CircuitBreaker>, // provider_name → breaker
+    // ... existing fields
+}
+
+impl LLMClient {
+    pub fn new() -> Self {
+        let mut circuit_breakers = HashMap::new();
+
+        // Create circuit breaker per provider
+        circuit_breakers.insert("anthropic".to_string(), CircuitBreaker::new());
+        circuit_breakers.insert("google".to_string(), CircuitBreaker::new());
+        circuit_breakers.insert("deepseek".to_string(), CircuitBreaker::new());
+
+        Self {
+            providers: HashMap::new(),
+            rate_limiters: HashMap::new(),
+            circuit_breakers,
+            // ... initialize other fields
+        }
+    }
+
+    pub async fn generate(&self, request: LLMRequest) -> Result<LLMResponse> {
+        let provider_name = self.detect_provider(&request.model);
+
+        // Apply rate limiting...
+        // (code from section 7.2)
+
+        // Apply circuit breaker protection
+        let breaker = self.circuit_breakers.get_mut(provider_name)
+            .ok_or_else(|| LLMError::ProviderNotFound(provider_name.to_string()))?;
+
+        match breaker.call(|| {
+            // Execute provider request inside circuit breaker
+            let provider = self.providers.get(provider_name)?;
+            provider.generate(request.clone())
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+        }) {
+            Ok(response) => Ok(response),
+            Err(CircuitBreakerError::Open) => {
+                Err(LLMError::ProviderUnavailable(
+                    format!("{} circuit breaker is open (too many failures)", provider_name)
+                ))
+            }
+            Err(CircuitBreakerError::RequestFailed(e)) => {
+                Err(LLMError::ProviderError(e.to_string()))
+            }
+        }
+    }
+}
+```
+
+**Testing:**
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_circuit_breaker_opens_after_failures() {
+        let mut breaker = CircuitBreaker::new();
+        assert_eq!(breaker.state(), CircuitState::Closed);
+
+        // Fail 5 times (threshold)
+        for _ in 0..5 {
+            let _ = breaker.call(|| Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "test error"
+            ))));
+        }
+
+        // Circuit should be open
+        assert_eq!(breaker.state(), CircuitState::Open);
+
+        // Next request should be rejected immediately
+        let result = breaker.call(|| Ok(()));
+        assert!(matches!(result, Err(CircuitBreakerError::Open)));
+    }
+
+    #[test]
+    fn test_circuit_breaker_half_open_recovery() {
+        let mut breaker = CircuitBreaker::new();
+
+        // Trigger open state
+        for _ in 0..5 {
+            let _ = breaker.call(|| Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "test"
+            ))));
+        }
+
+        // Manually transition to half-open (in real code, this happens after timeout)
+        breaker.open_until = Some(Instant::now() - Duration::from_secs(1));
+
+        // First success in half-open
+        let _ = breaker.call(|| Ok(42));
+        assert_eq!(breaker.state(), CircuitState::HalfOpen);
+
+        // Second success should close circuit
+        let _ = breaker.call(|| Ok(42));
+        assert_eq!(breaker.state(), CircuitState::Closed);
+    }
+}
+```
+
+---
+
+## 8. Cost Calculation
+
+### 8.1 Pricing Table
+
+```rust
+// llm/cost.rs
+
+/// Pricing per million tokens (input, output)
+pub const PRICING: &[(&str, f64, f64)] = &[
+    // Anthropic
+    ("claude-3-5-sonnet", 3.0, 15.0),
+    ("claude-3-opus", 15.0, 75.0),
+    ("claude-3-sonnet", 3.0, 15.0),
+    ("claude-3-haiku", 0.25, 1.25),
+
+    // Google
+    ("gemini-2.0-flash", 0.075, 0.30),
+    ("gemini-1.5-pro", 1.25, 5.0),
+
+    // DeepSeek
+    ("deepseek-chat", 0.14, 0.28),
+];
+
+pub fn calculate_cost(model: &str, prompt_tokens: usize, completion_tokens: usize) -> f64 {
+    for (model_prefix, input_price, output_price) in PRICING {
+        if model.starts_with(model_prefix) {
+            return (prompt_tokens as f64 * input_price / 1_000_000.0)
+                + (completion_tokens as f64 * output_price / 1_000_000.0);
+        }
+    }
+
+    // Default fallback
+    0.0
+}
+```
+
+---
+
+## 9. Error Handling
+
+### 9.1 Error Recovery Strategy
+
+| Error Type | Recovery Action | Max Retries |
+|-----------|----------------|-------------|
+| NetworkError | Exponential backoff (2s, 4s, 8s) | 3 |
+| RateLimitExceeded | Wait retry-after duration | 2 |
+| InvalidApiKey | Fail immediately | 0 |
+| ParseError | Fail immediately | 0 |
+| ApiError (5xx) | Exponential backoff | 3 |
+| ApiError (4xx) | Fail immediately | 0 |
+
+### 9.2 Error Propagation
+
+```rust
+impl From<reqwest::Error> for LLMError {
+    fn from(e: reqwest::Error) -> Self {
+        LLMError::NetworkError(e.to_string())
+    }
+}
+
+impl From<serde_json::Error> for LLMError {
+    fn from(e: serde_json::Error) -> Self {
+        LLMError::ParseError(e.to_string())
+    }
+}
+```
+
+---
+
+## 10. Testing Requirements
+
+### 10.1 Unit Tests
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_provider_detection() {
+        let client = LLMClient::new().unwrap();
+        assert_eq!(client.detect_provider("claude-3-5-sonnet").unwrap(), "anthropic");
+        assert_eq!(client.detect_provider("gemini-2.0-flash").unwrap(), "google");
+        assert_eq!(client.detect_provider("deepseek-chat").unwrap(), "deepseek");
+
+        assert!(client.detect_provider("unknown-model").is_err());
+    }
+
+    #[test]
+    fn test_cost_calculation() {
+        let cost = calculate_cost("claude-3-5-sonnet", 1000, 500);
+        assert_eq!(cost, (1000.0 * 3.0 / 1_000_000.0) + (500.0 * 15.0 / 1_000_000.0));
+    }
+
+    #[tokio::test]
+    async fn test_retry_logic() {
+        let mut attempt_count = 0;
+
+        let result = with_exponential_backoff(
+            || async {
+                attempt_count += 1;
+                if attempt_count < 3 {
+                    Err(anyhow::anyhow!("Simulated failure"))
+                } else {
+                    Ok(42)
+                }
+            },
+            3,
+            Duration::from_millis(10),
+        ).await;
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 42);
+        assert_eq!(attempt_count, 3);
+    }
+}
+```
+
+### 10.2 Integration Tests
+
+```rust
+#[cfg(test)]
+mod integration_tests {
+    use super::*;
+    use mockito::Server;
+
+    #[tokio::test]
+    async fn test_anthropic_generate() {
+        let mut server = Server::new_async().await;
+
+        let mock = server.mock("POST", "/v1/messages")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{
+                "content": [{"text": "Test response"}],
+                "usage": {
+                    "input_tokens": 100,
+                    "output_tokens": 50
+                }
+            }"#)
+            .create();
+
+        // Test would use mock server URL
+        // (Actual implementation would require dependency injection)
+
+        mock.assert();
+    }
+}
+```
+
+---
+
+## 11. Performance Requirements
+
+| Metric | Target | Validation Method |
+|--------|--------|------------------|
+| **Request Latency** | < 10s (95th percentile) | Measure across 100 requests |
+| **Timeout Handling** | 120s max | Unit test with delayed mock |
+| **Memory Usage** | < 50MB per client | Profile with 1000 requests |
+| **Cost Tracking Accuracy** | ±0.001 USD | Compare with provider invoices |
+
+---
+
+## 12. Security Requirements
+
+### 12.1 API Key Handling
+- **Storage**: Read from environment variables only (never hardcode)
+- **Transmission**: HTTPS only (validated by reqwest)
+- **Logging**: Never log API keys (mask in debug output)
+- **Validation**: Check key format before first request
+
+### 12.2 Request Sanitization
+```rust
+impl LLMRequest {
+    pub fn sanitize(&mut self) {
+        // Limit prompt length to prevent abuse
+        if self.prompt.len() > 100_000 {
+            self.prompt.truncate(100_000);
+        }
+
+        // Clamp max_tokens to reasonable range
+        self.max_tokens = self.max_tokens.clamp(1, 16_000);
+
+        // Clamp temperature to valid range
+        self.temperature = self.temperature.clamp(0.0, 1.0);
+    }
+}
+```
+
+---
+
+## 13. Traceability Matrix
+
+| L2 Interface Requirement | Implementation Element | Validation |
+|-------------------------|----------------------|------------|
+| ICD-03: LLMRequest schema | `LLMRequest` struct | Unit test deserialization |
+| ICD-03: Multi-provider support | `LLMProvider` trait | Integration tests per provider |
+| ICD-03: Cost tracking | `calculate_cost()` | Compare with manual calculation |
+| ICD-03: Error handling | `LLMError` enum | Unit tests for all error types |
+| L1-SAD REQ-SYS-002 | Provider routing | Unit test `detect_provider()` |
+| L1-SAD MO-003 (Cost < $0.10) | DeepSeek for phases 1-3 | Integration test workflow cost |
+
+---
+
+## 14. Future Enhancements
+
+### 14.1 Streaming Support
+```rust
+pub async fn generate_stream(
+    &self,
+    request: LLMRequest,
+) -> Result<impl Stream<Item = Result<String>>> {
+    // Stream tokens as they arrive (for UI progress)
+    unimplemented!("Streaming support - post-MVP")
+}
+```
+
+### 14.2 Response Caching
+```rust
+pub struct CachedLLMClient {
+    inner: LLMClient,
+    cache: HashMap<String, LLMResponse>, // prompt hash → response
+}
+```
+
+---
+
+**Document Status:** Complete - Ready for L3-CDD-04-QualityGates
+**Next Document:** L3-CDD-04-QualityGates.md
