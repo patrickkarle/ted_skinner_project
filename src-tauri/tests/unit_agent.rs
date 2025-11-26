@@ -79,10 +79,10 @@ fn test_agent_new_initializes_correctly() {
     let manifest = create_test_manifest();
     let api_key = "test-key-12345".to_string();
 
-    let _agent = Agent::new(manifest, api_key, None);
+    let agent = Agent::new(manifest, api_key, None);
 
     // Verify agent created successfully (implicitly - would panic if failed)
-    assert!(true, "Agent construction should succeed");
+    assert!(agent.get_context("nonexistent").is_none(), "New agent should have empty context");
 }
 
 #[test]

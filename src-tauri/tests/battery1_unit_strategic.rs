@@ -4,12 +4,12 @@
 
 use fullintel_agent::agent::{AgentState, PhaseStatus};
 use fullintel_agent::llm::{
-    CircuitBreaker, CircuitBreakerError, CircuitState, LLMClient, LLMError, LLMRequest, RateLimiter,
+    CircuitBreaker, CircuitBreakerError, CircuitState, LLMClient, LLMRequest, RateLimiter,
 };
 use fullintel_agent::manifest::{
-    DataSchema, Manifest, ManifestHeader, Phase, QualityGate, SchemaField,
+    Manifest,
 };
-use std::collections::HashMap;
+
 use std::io::Write;
 use std::time::Duration;
 use tempfile::NamedTempFile;
@@ -1052,6 +1052,7 @@ fn test_rate_limiter_fractional_tokens() {
 // ------------------------------------------------------------------
 
 #[test]
+#[allow(clippy::needless_range_loop)]
 fn test_rate_limiter_concurrent_acquisition() {
     use fullintel_agent::llm::RateLimiter;
 

@@ -16,8 +16,8 @@
 //
 // ============================================================================
 
-use fullintel_agent::agent::{Agent, AgentState, PhaseStatus};
-use fullintel_agent::manifest::{Manifest, Phase};
+use fullintel_agent::agent::{Agent};
+use fullintel_agent::manifest::{Manifest};
 use std::io::Write;
 use tempfile::NamedTempFile;
 
@@ -263,7 +263,7 @@ async fn test_agent_executes_phase_from_manifest() {
     // Run workflow with initial input
     // Note: This will attempt to call LLM API, which may fail without valid API key
     // But we're testing the phase execution flow, not LLM response
-    let result = agent.run_workflow("test input").await;
+    let _result = agent.run_workflow("test input").await;
 
     // The workflow may fail due to LLM API issues, but we can verify:
     // 1. No panic occurred
@@ -370,7 +370,7 @@ async fn test_agent_workflow_multi_phase_execution() {
     let mut agent = test_utils::create_test_agent(manifest);
 
     // Run complete workflow
-    let result = agent.run_workflow("Acme Corp").await;
+    let _result = agent.run_workflow("Acme Corp").await;
 
     // Workflow may fail due to LLM API (expected without valid key)
     // But we can verify partial execution and data flow setup
@@ -430,7 +430,7 @@ async fn test_agent_uses_llmclient_for_phase_execution() {
     let mut agent = test_utils::create_test_agent(manifest);
 
     // Run workflow - this will attempt LLM call via execute_phase()
-    let result = agent.run_workflow("Acme Corp").await;
+    let _result = agent.run_workflow("Acme Corp").await;
 
     // Without valid API key, this will fail at LLM call
     // But we've validated the integration flow:
@@ -479,7 +479,7 @@ async fn test_agent_handles_llm_rate_limit_errors() {
     let mut agent = test_utils::create_test_agent(manifest);
 
     // Run workflow - will attempt LLM call
-    let result = agent.run_workflow("Test Data").await;
+    let _result = agent.run_workflow("Test Data").await;
 
     // Workflow will fail (no valid API key), but we verify:
     // 1. Error handling exists
@@ -572,7 +572,7 @@ async fn test_agent_constructs_proper_llmrequest_from_phase() {
     let mut agent = test_utils::create_test_agent(manifest);
 
     // Provide specific input that should appear in LLMRequest
-    let result = agent.run_workflow("Microsoft Corporation").await;
+    let _result = agent.run_workflow("Microsoft Corporation").await;
 
     // Verify context setup (proves phase execution reached LLMRequest construction)
     assert!(agent.get_context("target_company").is_some());
@@ -625,7 +625,7 @@ async fn test_agent_streaming_responses() {
     let mut agent = test_utils::create_test_agent(manifest);
 
     // Run workflow
-    let result = agent.run_workflow("Generate report on AI trends").await;
+    let _result = agent.run_workflow("Generate report on AI trends").await;
 
     // Verify phase execution reached LLM call
     assert!(agent.get_context("target_company").is_some());
@@ -978,7 +978,7 @@ async fn test_complete_agent_workflow_no_api() {
     let mut agent = test_utils::create_test_agent(manifest);
 
     // Execute complete workflow
-    let result = agent.run_workflow("Acme Corporation").await;
+    let _result = agent.run_workflow("Acme Corporation").await;
 
     // Verify workflow execution (will fail without API key, but flow is validated)
 
@@ -1105,7 +1105,7 @@ async fn test_workflow_context_sharing() {
     let mut agent = test_utils::create_test_agent(manifest);
 
     // Run workflow
-    let result = agent.run_workflow("Initial Data").await;
+    let _result = agent.run_workflow("Initial Data").await;
 
     // Verify context was initialized
     assert!(agent.get_context("target_company").is_some());
@@ -1177,7 +1177,7 @@ async fn test_workflow_quality_gates() {
     let mut agent = test_utils::create_test_agent(manifest);
 
     // Run workflow
-    let result = agent.run_workflow("Quality Test Data").await;
+    let _result = agent.run_workflow("Quality Test Data").await;
 
     // Verify context initialization
     assert!(agent.get_context("target_company").is_some());
@@ -1254,7 +1254,7 @@ async fn test_complete_workflow_with_protection() {
     let mut agent = test_utils::create_test_agent(manifest);
 
     // Execute workflow with all protective mechanisms active
-    let result = agent.run_workflow("TechCorp International").await;
+    let _result = agent.run_workflow("TechCorp International").await;
 
     // Verify complete system integration
 
