@@ -8,9 +8,9 @@
 // ============================================================================
 
 use fullintel_agent::{LLMClient, LLMRequest};
+use futures::StreamExt;
 use std::fs;
 use std::path::PathBuf;
-use futures::StreamExt;
 
 fn load_api_key(provider: &str) -> Result<String, std::io::Error> {
     let key_dir = PathBuf::from(r"C:\continuum\continuum - API Keys");
@@ -18,10 +18,12 @@ fn load_api_key(provider: &str) -> Result<String, std::io::Error> {
         "anthropic" => "anthropic_api_key.txt",
         "google" => "gemini_api_key.txt",
         "deepseek" => "deepseek_api_key.txt",
-        _ => return Err(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            format!("Unknown provider: {}", provider)
-        )),
+        _ => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("Unknown provider: {}", provider),
+            ))
+        }
     };
 
     let key_path = key_dir.join(key_file);
@@ -48,10 +50,17 @@ async fn test_e2e_anthropic_real_api_call() {
 
     let response = client.generate(request).await;
 
-    assert!(response.is_ok(), "Real API call should succeed. Error: {:?}", response.err());
+    assert!(
+        response.is_ok(),
+        "Real API call should succeed. Error: {:?}",
+        response.err()
+    );
     let result = response.unwrap();
-    assert!(result.contains("Integration test successful") || result.contains("test successful"),
-            "Response should contain expected text. Got: {}", result);
+    assert!(
+        result.contains("Integration test successful") || result.contains("test successful"),
+        "Response should contain expected text. Got: {}",
+        result
+    );
 
     println!("✓ E2E Test Passed: System successfully generated text using Claude API");
     println!("  Response: {}", result);
@@ -62,8 +71,7 @@ async fn test_e2e_anthropic_real_api_call() {
 async fn test_e2e_multiple_requests() {
     // INTEGRATION-TEST-E2E-002: Verify system can handle multiple sequential requests
 
-    let api_key = load_api_key("anthropic")
-        .expect("Failed to load Anthropic API key");
+    let api_key = load_api_key("anthropic").expect("Failed to load Anthropic API key");
 
     let mut client = LLMClient::new(api_key);
 
@@ -97,8 +105,7 @@ async fn test_e2e_multiple_requests() {
 async fn test_e2e_different_models() {
     // INTEGRATION-TEST-E2E-003: Verify system works with different Claude models
 
-    let api_key = load_api_key("anthropic")
-        .expect("Failed to load Anthropic API key");
+    let api_key = load_api_key("anthropic").expect("Failed to load Anthropic API key");
 
     let mut client = LLMClient::new(api_key);
 
@@ -120,8 +127,7 @@ async fn test_e2e_different_models() {
 async fn test_e2e_system_and_user_messages() {
     // INTEGRATION-TEST-E2E-004: Verify system and user messages work correctly
 
-    let api_key = load_api_key("anthropic")
-        .expect("Failed to load Anthropic API key");
+    let api_key = load_api_key("anthropic").expect("Failed to load Anthropic API key");
 
     let mut client = LLMClient::new(api_key);
 
@@ -149,8 +155,7 @@ async fn test_e2e_anthropic_streaming() {
     // INTEGRATION-TEST-E2E-005: Verify Anthropic streaming works end-to-end
     // Purpose: Test the actual streaming functionality with real API
 
-    let api_key = load_api_key("anthropic")
-        .expect("Failed to load Anthropic API key");
+    let api_key = load_api_key("anthropic").expect("Failed to load Anthropic API key");
 
     let mut client = LLMClient::new(api_key);
 
@@ -163,7 +168,11 @@ async fn test_e2e_anthropic_streaming() {
     println!("🔄 Starting Anthropic streaming test...");
 
     let stream_result = client.generate_stream(request).await;
-    assert!(stream_result.is_ok(), "Stream creation should succeed. Error: {:?}", stream_result.err());
+    assert!(
+        stream_result.is_ok(),
+        "Stream creation should succeed. Error: {:?}",
+        stream_result.err()
+    );
 
     let mut stream = stream_result.unwrap();
     let mut chunks_received = 0;
@@ -196,8 +205,7 @@ async fn test_e2e_streaming_vs_generate() {
     // INTEGRATION-TEST-E2E-006: Verify streaming produces same result as generate()
     // Purpose: Validate streaming integrity
 
-    let api_key = load_api_key("anthropic")
-        .expect("Failed to load Anthropic API key");
+    let api_key = load_api_key("anthropic").expect("Failed to load Anthropic API key");
 
     let mut client1 = LLMClient::new(api_key.clone());
     let mut client2 = LLMClient::new(api_key);
@@ -222,7 +230,9 @@ async fn test_e2e_streaming_vs_generate() {
     }
 
     // Test non-streaming
-    let generated_result = client2.generate(request2).await
+    let generated_result = client2
+        .generate(request2)
+        .await
         .expect("Generate should succeed");
 
     println!("✓ E2E Test Passed: Streaming vs Generate comparison");
@@ -230,8 +240,10 @@ async fn test_e2e_streaming_vs_generate() {
     println!("  Generated: {}", generated_result);
 
     // Both should contain the expected text
-    assert!(streamed_result.contains("Test response") || generated_result.contains("Test response"),
-            "Both methods should produce valid responses");
+    assert!(
+        streamed_result.contains("Test response") || generated_result.contains("Test response"),
+        "Both methods should produce valid responses"
+    );
 }
 
 #[tokio::test]
@@ -240,8 +252,7 @@ async fn test_e2e_error_handling() {
     // INTEGRATION-TEST-E2E-007: Verify error handling works with invalid model
     // Purpose: Test error conditions trigger properly
 
-    let api_key = load_api_key("anthropic")
-        .expect("Failed to load Anthropic API key");
+    let api_key = load_api_key("anthropic").expect("Failed to load Anthropic API key");
 
     let mut client = LLMClient::new(api_key);
 
@@ -269,8 +280,7 @@ async fn test_e2e_rate_limiter_integration() {
     // INTEGRATION-TEST-E2E-008: Verify rate limiter works in real scenarios
     // Purpose: Test rate limiting with actual API calls
 
-    let api_key = load_api_key("anthropic")
-        .expect("Failed to load Anthropic API key");
+    let api_key = load_api_key("anthropic").expect("Failed to load Anthropic API key");
 
     let mut client = LLMClient::new(api_key);
 
@@ -287,8 +297,12 @@ async fn test_e2e_rate_limiter_integration() {
         let result = client.generate(request).await;
         let duration = start.elapsed();
 
-        println!("  Request {}: {:?} (took {:?})", i,
-                 result.as_ref().map(|s| s.trim()), duration);
+        println!(
+            "  Request {}: {:?} (took {:?})",
+            i,
+            result.as_ref().map(|s| s.trim()),
+            duration
+        );
 
         assert!(result.is_ok(), "Request {} should succeed", i);
     }
@@ -310,8 +324,7 @@ async fn test_e2e_helper_methods() {
     use std::io::Write;
     use tempfile::NamedTempFile;
 
-    let api_key = load_api_key("anthropic")
-        .expect("Failed to load Anthropic API key");
+    let api_key = load_api_key("anthropic").expect("Failed to load Anthropic API key");
 
     // Create test manifest using tempfile
     let yaml_content = r#"

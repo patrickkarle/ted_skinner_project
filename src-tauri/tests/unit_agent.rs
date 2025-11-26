@@ -128,7 +128,10 @@ fn test_get_context_returns_none_for_missing_key() {
 
     let result = agent.get_context("nonexistent_key");
 
-    assert!(result.is_none(), "Should return None for missing context key");
+    assert!(
+        result.is_none(),
+        "Should return None for missing context key"
+    );
 }
 
 // ----------------------------------------------------------------------------
@@ -182,7 +185,10 @@ async fn test_run_workflow_with_empty_manifest() {
 
     let result = agent.run_workflow("test input").await;
 
-    assert!(result.is_ok(), "Empty workflow should succeed without errors");
+    assert!(
+        result.is_ok(),
+        "Empty workflow should succeed without errors"
+    );
 }
 
 #[tokio::test]

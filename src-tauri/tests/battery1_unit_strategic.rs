@@ -2,15 +2,16 @@
 // Test Plan: docs/se-cpm/test-plans/FRESH-TESTPLAN-2025-11-24.md
 // Methodology: CDP-PHASE-06-TESTING-PLAN-Enhanced.md (N:1 Multi-Modal Mapping)
 
-use fullintel_agent::llm::{
-    LLMClient, LLMRequest, LLMError, RateLimiter, CircuitBreaker,
-    CircuitState, CircuitBreakerError
-};
-use fullintel_agent::manifest::{Manifest, ManifestHeader, DataSchema, Phase, QualityGate, SchemaField};
 use fullintel_agent::agent::{AgentState, PhaseStatus};
-use std::time::Duration;
+use fullintel_agent::llm::{
+    CircuitBreaker, CircuitBreakerError, CircuitState, LLMClient, LLMError, LLMRequest, RateLimiter,
+};
+use fullintel_agent::manifest::{
+    DataSchema, Manifest, ManifestHeader, Phase, QualityGate, SchemaField,
+};
 use std::collections::HashMap;
 use std::io::Write;
+use std::time::Duration;
 use tempfile::NamedTempFile;
 
 // ------------------------------------------------------------------
@@ -89,7 +90,11 @@ fn test_rate_limiter_full_lifecycle() {
 
     // Component 1: RateLimiter::new() - Creation with capacity
     let mut limiter = RateLimiter::new(60.0);
-    assert_eq!(limiter.available_tokens(), 60.0, "Initial capacity should be 60.0");
+    assert_eq!(
+        limiter.available_tokens(),
+        60.0,
+        "Initial capacity should be 60.0"
+    );
 
     // Component 2: try_acquire() - Token consumption
     for i in 0..5 {
@@ -113,7 +118,10 @@ fn test_rate_limiter_full_lifecycle() {
     std::thread::sleep(Duration::from_millis(1100)); // Wait for at least 1 second
     let after_refill = limiter.available_tokens();
     assert!(after_refill > 0.0, "Tokens should refill over time");
-    assert!(after_refill < 60.0, "Should not instantly refill to full capacity");
+    assert!(
+        after_refill < 60.0,
+        "Should not instantly refill to full capacity"
+    );
 }
 
 // ------------------------------------------------------------------
@@ -131,19 +139,29 @@ fn test_circuit_breaker_state_machine() {
     let mut breaker = CircuitBreaker::new(2, 2, Duration::from_millis(100));
 
     // Component 2: state() - Initial state is Closed
-    assert_eq!(breaker.state(), CircuitState::Closed, "Initial state should be Closed");
+    assert_eq!(
+        breaker.state(),
+        CircuitState::Closed,
+        "Initial state should be Closed"
+    );
 
     // Component 3: call() - Operation wrapping & Closed → Open transition
     let _ = breaker.call(|| Err::<(), _>("simulated failure 1"));
     let _ = breaker.call(|| Err::<(), _>("simulated failure 2"));
 
     // After failure_threshold (2) failures, should transition to Open
-    assert_eq!(breaker.state(), CircuitState::Open, "Should be Open after 2 failures");
+    assert_eq!(
+        breaker.state(),
+        CircuitState::Open,
+        "Should be Open after 2 failures"
+    );
 
     // Component 4: Open state rejects immediately
     let result = breaker.call(|| Ok::<&str, &str>("test"));
-    assert!(matches!(result, Err(CircuitBreakerError::Open)),
-            "Open circuit should reject calls immediately");
+    assert!(
+        matches!(result, Err(CircuitBreakerError::Open)),
+        "Open circuit should reject calls immediately"
+    );
 
     // Component 5: Open → HalfOpen transition (timeout-based)
     std::thread::sleep(Duration::from_millis(150)); // Wait past timeout (100ms)
@@ -151,16 +169,22 @@ fn test_circuit_breaker_state_machine() {
     // First call after timeout transitions to HalfOpen (transition happens on call attempt)
     let _ = breaker.call(|| Ok::<&str, &str>("test call to trigger HalfOpen"));
     let state_after_timeout = breaker.state();
-    assert_eq!(state_after_timeout, CircuitState::HalfOpen,
-               "Should be HalfOpen after timeout");
+    assert_eq!(
+        state_after_timeout,
+        CircuitState::HalfOpen,
+        "Should be HalfOpen after timeout"
+    );
 
     // Component 6: HalfOpen → Closed transition (success recovery)
     let _ = breaker.call(|| Ok::<&str, &str>("success 1"));
     let _ = breaker.call(|| Ok::<&str, &str>("success 2"));
 
     // After success_threshold (2) successes, should transition back to Closed
-    assert_eq!(breaker.state(), CircuitState::Closed,
-               "Should be Closed after 2 successes in HalfOpen");
+    assert_eq!(
+        breaker.state(),
+        CircuitState::Closed,
+        "Should be Closed after 2 successes in HalfOpen"
+    );
 }
 
 // ------------------------------------------------------------------
@@ -178,8 +202,10 @@ fn test_manifest_error_handling() {
     let result = Manifest::load_from_file("this_file_does_not_exist_12345.yaml");
     assert!(result.is_err(), "Should error on non-existent file");
     let err_msg = result.unwrap_err().to_string();
-    assert!(err_msg.contains("Failed to read") || err_msg.contains("No such file"),
-            "Error should mention file reading failure");
+    assert!(
+        err_msg.contains("Failed to read") || err_msg.contains("No such file"),
+        "Error should mention file reading failure"
+    );
 
     // Component 2: Invalid YAML syntax error handling
     let mut temp_invalid = NamedTempFile::new().unwrap();
@@ -189,8 +215,10 @@ fn test_manifest_error_handling() {
     let result = Manifest::load_from_file(temp_invalid.path());
     assert!(result.is_err(), "Should error on invalid YAML syntax");
     let err_msg = result.unwrap_err().to_string();
-    assert!(err_msg.contains("Failed to parse") || err_msg.contains("YAML"),
-            "Error should mention parsing failure");
+    assert!(
+        err_msg.contains("Failed to parse") || err_msg.contains("YAML"),
+        "Error should mention parsing failure"
+    );
 
     // Component 3: Missing required fields error handling
     let mut temp_incomplete = NamedTempFile::new().unwrap();
@@ -216,7 +244,10 @@ quality_gates: []
     temp_valid.flush().unwrap();
 
     let result = Manifest::load_from_file(temp_valid.path());
-    assert!(result.is_ok(), "Should successfully load valid minimal manifest");
+    assert!(
+        result.is_ok(),
+        "Should successfully load valid minimal manifest"
+    );
 
     let manifest = result.unwrap();
     assert_eq!(manifest.manifest.id, "test-manifest-001");
@@ -239,39 +270,75 @@ fn test_agent_state_context_operations() {
     // Component 1: AgentState::new() - Initialization
     let mut state = AgentState::new();
 
-    assert!(state.current_phase_id.is_none(), "Initial phase ID should be None");
-    assert_eq!(state.phase_statuses.len(), 0, "Initial statuses should be empty");
+    assert!(
+        state.current_phase_id.is_none(),
+        "Initial phase ID should be None"
+    );
+    assert_eq!(
+        state.phase_statuses.len(),
+        0,
+        "Initial statuses should be empty"
+    );
     assert_eq!(state.context.len(), 0, "Initial context should be empty");
     assert_eq!(state.logs.len(), 0, "Initial logs should be empty");
 
     // Component 2: Context HashMap - Insertion
-    state.context.insert("target_company".to_string(), "Acme Corp".to_string());
-    assert_eq!(state.context.get("target_company"), Some(&"Acme Corp".to_string()),
-               "Should retrieve inserted value");
+    state
+        .context
+        .insert("target_company".to_string(), "Acme Corp".to_string());
+    assert_eq!(
+        state.context.get("target_company"),
+        Some(&"Acme Corp".to_string()),
+        "Should retrieve inserted value"
+    );
 
     // Component 3: Context HashMap - Updates
-    state.context.insert("target_company".to_string(), "Updated Corp".to_string());
-    assert_eq!(state.context.get("target_company"), Some(&"Updated Corp".to_string()),
-               "Should update existing value");
+    state
+        .context
+        .insert("target_company".to_string(), "Updated Corp".to_string());
+    assert_eq!(
+        state.context.get("target_company"),
+        Some(&"Updated Corp".to_string()),
+        "Should update existing value"
+    );
 
     // Component 4: Multiple keys and retrieval
-    state.context.insert("research_data".to_string(), "Research content".to_string());
-    state.context.insert("analysis_result".to_string(), "Analysis content".to_string());
+    state
+        .context
+        .insert("research_data".to_string(), "Research content".to_string());
+    state.context.insert(
+        "analysis_result".to_string(),
+        "Analysis content".to_string(),
+    );
 
     assert_eq!(state.context.len(), 3, "Should have 3 context entries");
-    assert!(state.context.contains_key("research_data"), "Should contain research_data key");
-    assert!(state.context.contains_key("analysis_result"), "Should contain analysis_result key");
+    assert!(
+        state.context.contains_key("research_data"),
+        "Should contain research_data key"
+    );
+    assert!(
+        state.context.contains_key("analysis_result"),
+        "Should contain analysis_result key"
+    );
 
     // Component 5: Serialization roundtrip (JSON)
     let json = serde_json::to_string(&state).unwrap();
     let deserialized: AgentState = serde_json::from_str(&json).unwrap();
 
-    assert_eq!(deserialized.context.len(), 3, "Deserialized should have 3 context entries");
-    assert_eq!(deserialized.context.get("target_company"),
-               Some(&"Updated Corp".to_string()),
-               "Deserialized should preserve values");
-    assert_eq!(deserialized.current_phase_id, state.current_phase_id,
-               "Deserialized should preserve phase ID");
+    assert_eq!(
+        deserialized.context.len(),
+        3,
+        "Deserialized should have 3 context entries"
+    );
+    assert_eq!(
+        deserialized.context.get("target_company"),
+        Some(&"Updated Corp".to_string()),
+        "Deserialized should preserve values"
+    );
+    assert_eq!(
+        deserialized.current_phase_id, state.current_phase_id,
+        "Deserialized should preserve phase ID"
+    );
 }
 
 // ------------------------------------------------------------------
@@ -320,7 +387,7 @@ fn test_phase_status_transitions() {
     match failed {
         PhaseStatus::Failed(msg) => {
             assert_eq!(msg, "Test error");
-        },
+        }
         _ => panic!("Expected Failed variant"),
     }
 
@@ -353,7 +420,7 @@ fn test_llm_error_variants() {
     match rate_error {
         LLMError::RateLimitExceeded(provider) => {
             assert_eq!(provider, "claude");
-        },
+        }
         _ => panic!("Expected RateLimitExceeded variant"),
     }
 
@@ -543,7 +610,7 @@ quality_gates:
 
     // 2. Test QualityGate.phase (not phase_id)
     let gate = &manifest.quality_gates[0];
-    assert_eq!(gate.phase, "phase1");  // ✅ 'phase', not 'phase_id'
+    assert_eq!(gate.phase, "phase1"); // ✅ 'phase', not 'phase_id'
     assert_eq!(gate.check, "output_valid");
     assert_eq!(gate.fail_action, "abort");
 
@@ -781,8 +848,8 @@ fn test_circuit_breaker_timeout_config() {
 #[test]
 fn test_circuit_breaker_success_threshold() {
     use fullintel_agent::llm::{CircuitBreaker, CircuitState};
-    use std::time::Duration;
     use std::thread;
+    use std::time::Duration;
 
     // 1. Create and open circuit (failure=2, success=2, timeout=100ms)
     let mut breaker = CircuitBreaker::new(2, 2, Duration::from_millis(100));
@@ -853,9 +920,9 @@ fn test_circuit_breaker_concurrent_pattern() {
     let mut breaker = CircuitBreaker::new(5, 2, Duration::from_secs(60));
 
     // 2. Simulate multiple sequential calls (pattern for concurrent use)
-    let results: Vec<_> = (0..5).map(|i| {
-        breaker.call(|| Ok::<i32, &str>(i))
-    }).collect();
+    let results: Vec<_> = (0..5)
+        .map(|i| breaker.call(|| Ok::<i32, &str>(i)))
+        .collect();
 
     // 3. Verify all calls succeeded
     assert_eq!(results.len(), 5);
@@ -992,9 +1059,7 @@ fn test_rate_limiter_concurrent_acquisition() {
     let mut limiter = RateLimiter::new(5.0);
 
     // 2. Simulate concurrent-style sequential acquisitions
-    let results: Vec<_> = (0..7).map(|_| {
-        limiter.try_acquire()
-    }).collect();
+    let results: Vec<_> = (0..7).map(|_| limiter.try_acquire()).collect();
 
     // 3. Verify first 5 succeed, last 2 fail
     for i in 0..5 {

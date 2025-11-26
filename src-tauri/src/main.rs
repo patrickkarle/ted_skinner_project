@@ -7,11 +7,11 @@ mod manifest;
 
 use agent::Agent;
 use manifest::Manifest;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::{Manager, State, Window};
-use serde::{Serialize, Deserialize};
 
 // ------------------------------------------------------------------
 // 1. Persistent Configuration Structs
@@ -30,7 +30,9 @@ impl Default for AppConfig {
             api_key: None,
             // Default path relative to where the app is run (dev mode)
             // In production, you'd likely bundle this differently.
-            last_manifest_path: Some(PathBuf::from("../manifests/fullintel_process_manifest.yaml")),
+            last_manifest_path: Some(PathBuf::from(
+                "../manifests/fullintel_process_manifest.yaml",
+            )),
         }
     }
 }
@@ -48,7 +50,7 @@ impl AppState {
     fn save(&self) -> Result<(), String> {
         let config = self.config.lock().map_err(|e| e.to_string())?;
         let json = serde_json::to_string_pretty(&*config).map_err(|e| e.to_string())?;
-        
+
         // Ensure directory exists before writing
         if let Some(parent) = self.config_path.parent() {
             if !parent.exists() {
@@ -72,10 +74,10 @@ async fn set_api_key(key: String, state: State<'_, AppState>) -> Result<(), Stri
         let mut config = state.config.lock().map_err(|_| "Failed to lock state")?;
         config.api_key = Some(key);
     }
-    
+
     // 2. Persist to Disk
     state.save()?;
-    
+
     Ok(())
 }
 
@@ -87,16 +89,21 @@ async fn get_app_state(state: State<'_, AppState>) -> Result<AppConfig, String> 
 
 #[tauri::command]
 async fn run_research(
-    company: String, 
-    window: Window, 
-    state: State<'_, AppState>
+    company: String,
+    window: Window,
+    state: State<'_, AppState>,
 ) -> Result<String, String> {
-    
     // 1. Retrieve Credentials from State
     let (api_key, manifest_path) = {
         let config = state.config.lock().map_err(|_| "Failed to lock state")?;
-        let key = config.api_key.clone().ok_or("API Key not set. Please configure in settings.")?;
-        let path = config.last_manifest_path.clone().ok_or("Manifest path not found.")?;
+        let key = config
+            .api_key
+            .clone()
+            .ok_or("API Key not set. Please configure in settings.")?;
+        let path = config
+            .last_manifest_path
+            .clone()
+            .ok_or("Manifest path not found.")?;
         (key, path)
     };
 
@@ -106,20 +113,24 @@ async fn run_research(
         return Err(format!("Manifest not found at: {:?}", manifest_path));
     }
     let manifest = Manifest::load_from_file(&manifest_path).map_err(|e| e.to_string())?;
-    
+
     // 3. Initialize Agent with Window Emitter
     // The window is passed here so the Agent can emit "agent-log" and "phase-update" events
     let mut agent = Agent::new(manifest, api_key, Some(window));
 
     // 4. Execute Workflow (The Heavy Lifting)
     // This runs the phases defined in the YAML
-    agent.run_workflow(&company).await.map_err(|e| e.to_string())?;
+    agent
+        .run_workflow(&company)
+        .await
+        .map_err(|e| e.to_string())?;
 
     // 5. Retrieve Final Artifact
     // We pull the generated markdown from the agent's context blackboard
     // The key "markdown_file" must match the `output_format` or target defined in your manifest Phase 5
-    let final_artifact = agent.get_context("markdown_file")
-        .unwrap_or_else(|| "Workflow completed, but no final artifact found in context.".to_string());
+    let final_artifact = agent.get_context("markdown_file").unwrap_or_else(|| {
+        "Workflow completed, but no final artifact found in context.".to_string()
+    });
 
     Ok(final_artifact)
 }
@@ -134,7 +145,10 @@ fn main() {
             // A. Resolve Config Path
             // This stores config in standard OS app data locations
             // e.g., C:\Users\You\AppData\Roaming\com.fullintel.agent\config.json
-            let app_dir = app.path().app_data_dir().expect("failed to get app data dir");
+            let app_dir = app
+                .path()
+                .app_data_dir()
+                .expect("failed to get app data dir");
             if !app_dir.exists() {
                 fs::create_dir_all(&app_dir).expect("failed to create app data dir");
             }

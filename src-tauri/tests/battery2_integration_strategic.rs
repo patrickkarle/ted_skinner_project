@@ -148,11 +148,7 @@ async fn test_agent_loads_valid_manifest() {
             "Research Phase",
             "Conduct research on the target company",
         ),
-        TestPhaseConfig::new(
-            "phase2",
-            "Analysis Phase",
-            "Analyze the research findings",
-        ),
+        TestPhaseConfig::new("phase2", "Analysis Phase", "Analyze the research findings"),
     ];
 
     let (manifest, _file) = create_test_manifest(phases);
@@ -213,7 +209,10 @@ phases:
     let mut file2 = NamedTempFile::new().unwrap();
     write!(file2, "{}", invalid_yaml2).unwrap();
     let result2 = Manifest::load_from_file(file2.path());
-    assert!(result2.is_err(), "Should reject manifest without manifest section");
+    assert!(
+        result2.is_err(),
+        "Should reject manifest without manifest section"
+    );
 
     // Test Case 3: Invalid field types
     let invalid_yaml3 = r#"
@@ -252,12 +251,11 @@ async fn test_agent_executes_phase_from_manifest() {
     use test_utils::{create_test_manifest, TestPhaseConfig};
 
     // Create manifest with single phase that outputs to context
-    let phases = vec![TestPhaseConfig::new(
-        "phase1",
-        "Test Phase",
-        "Generate a simple test output",
-    )
-    .with_output("test_output")];
+    let phases =
+        vec![
+            TestPhaseConfig::new("phase1", "Test Phase", "Generate a simple test output")
+                .with_output("test_output"),
+        ];
 
     let (manifest, _file) = create_test_manifest(phases);
     let mut agent = test_utils::create_test_agent(manifest);
@@ -298,13 +296,12 @@ async fn test_agent_handles_missing_phase_input() {
     use test_utils::{create_test_manifest, TestPhaseConfig};
 
     // Create manifest with phase that requires specific input
-    let phases = vec![TestPhaseConfig::new(
-        "phase1",
-        "Analysis Phase",
-        "Analyze the provided data",
-    )
-    .with_input("research_data") // Requires "research_data" from context
-    .with_output("analysis_result")];
+    let phases =
+        vec![
+            TestPhaseConfig::new("phase1", "Analysis Phase", "Analyze the provided data")
+                .with_input("research_data") // Requires "research_data" from context
+                .with_output("analysis_result"),
+        ];
 
     let (manifest, _file) = create_test_manifest(phases);
     let mut agent = test_utils::create_test_agent(manifest);
@@ -314,7 +311,10 @@ async fn test_agent_handles_missing_phase_input() {
     let result = agent.run_workflow("test company").await;
 
     // Workflow should fail because "research_data" is not in context
-    assert!(result.is_err(), "Should fail when required input is missing");
+    assert!(
+        result.is_err(),
+        "Should fail when required input is missing"
+    );
 
     // Verify error message indicates missing input
     let error_msg = result.unwrap_err().to_string();
@@ -420,12 +420,11 @@ async fn test_agent_uses_llmclient_for_phase_execution() {
     use test_utils::{create_test_manifest, TestPhaseConfig};
 
     // Create manifest with single phase
-    let phases = vec![TestPhaseConfig::new(
-        "research",
-        "Research Phase",
-        "Research the target company",
-    )
-    .with_output("research_result")];
+    let phases =
+        vec![
+            TestPhaseConfig::new("research", "Research Phase", "Research the target company")
+                .with_output("research_result"),
+        ];
 
     let (manifest, _file) = create_test_manifest(phases);
     let mut agent = test_utils::create_test_agent(manifest);
@@ -471,12 +470,10 @@ async fn test_agent_handles_llm_rate_limit_errors() {
     use test_utils::{create_test_manifest, TestPhaseConfig};
 
     // Create manifest with phase
-    let phases = vec![TestPhaseConfig::new(
-        "analysis",
-        "Analysis Phase",
-        "Analyze the data",
-    )
-    .with_output("analysis")];
+    let phases = vec![
+        TestPhaseConfig::new("analysis", "Analysis Phase", "Analyze the data")
+            .with_output("analysis"),
+    ];
 
     let (manifest, _file) = create_test_manifest(phases);
     let mut agent = test_utils::create_test_agent(manifest);
@@ -516,12 +513,9 @@ async fn test_agent_handles_llm_network_errors() {
     use test_utils::{create_test_manifest, TestPhaseConfig};
 
     // Create manifest with phase
-    let phases = vec![TestPhaseConfig::new(
-        "report",
-        "Report Phase",
-        "Generate report",
-    )
-    .with_output("report")];
+    let phases = vec![
+        TestPhaseConfig::new("report", "Report Phase", "Generate report").with_output("report"),
+    ];
 
     let (manifest, _file) = create_test_manifest(phases);
     let mut agent = test_utils::create_test_agent(manifest);
@@ -664,7 +658,7 @@ async fn test_agent_streaming_responses() {
 //
 // ============================================================================
 
-use fullintel_agent::llm::{RateLimiter, CircuitBreaker, CircuitState};
+use fullintel_agent::llm::{CircuitBreaker, CircuitState, RateLimiter};
 use std::time::Duration;
 
 /// Test 2.3.1: RateLimiter Throttles LLMClient Requests
@@ -784,7 +778,7 @@ fn test_circuitbreaker_recovers_after_timeout() {
     let mut breaker = CircuitBreaker::new(
         3,                          // 3 failures to open
         2,                          // 2 successes to close
-        Duration::from_millis(100)  // 100ms timeout
+        Duration::from_millis(100), // 100ms timeout
     );
 
     // Force circuit to Open state by causing failures
@@ -1035,26 +1029,13 @@ async fn test_workflow_handles_phase_failure() {
 
     // Create workflow where Phase 2 requires input that Phase 1 doesn't provide
     let phases = vec![
-        TestPhaseConfig::new(
-            "phase1",
-            "Phase 1",
-            "Do some work",
-        )
-        .with_output("output1"),  // Produces output1
-        TestPhaseConfig::new(
-            "phase2",
-            "Phase 2",
-            "Requires missing input",
-        )
-        .with_input("wrong_input")  // Requires wrong_input (not provided by phase1)
-        .with_output("output2"),
-        TestPhaseConfig::new(
-            "phase3",
-            "Phase 3",
-            "Should never execute",
-        )
-        .with_input("output2")
-        .with_output("output3"),
+        TestPhaseConfig::new("phase1", "Phase 1", "Do some work").with_output("output1"), // Produces output1
+        TestPhaseConfig::new("phase2", "Phase 2", "Requires missing input")
+            .with_input("wrong_input") // Requires wrong_input (not provided by phase1)
+            .with_output("output2"),
+        TestPhaseConfig::new("phase3", "Phase 3", "Should never execute")
+            .with_input("output2")
+            .with_output("output3"),
     ];
 
     let (manifest, _file) = create_test_manifest(phases);
@@ -1064,7 +1045,10 @@ async fn test_workflow_handles_phase_failure() {
     let result = agent.run_workflow("Test Input").await;
 
     // Workflow should fail
-    assert!(result.is_err(), "Workflow should fail when phase input is missing");
+    assert!(
+        result.is_err(),
+        "Workflow should fail when phase input is missing"
+    );
 
     // Verify error message indicates the problem
     let error_msg = result.unwrap_err().to_string();
@@ -1108,26 +1092,13 @@ async fn test_workflow_context_sharing() {
     // Phase 2: reads "step1_output" → produces "step2_output"
     // Phase 3: reads "step2_output" → produces "final_output"
     let phases = vec![
-        TestPhaseConfig::new(
-            "step1",
-            "Step 1",
-            "Initial processing",
-        )
-        .with_output("step1_output"),
-        TestPhaseConfig::new(
-            "step2",
-            "Step 2",
-            "Intermediate processing",
-        )
-        .with_input("step1_output")
-        .with_output("step2_output"),
-        TestPhaseConfig::new(
-            "step3",
-            "Step 3",
-            "Final processing",
-        )
-        .with_input("step2_output")
-        .with_output("final_output"),
+        TestPhaseConfig::new("step1", "Step 1", "Initial processing").with_output("step1_output"),
+        TestPhaseConfig::new("step2", "Step 2", "Intermediate processing")
+            .with_input("step1_output")
+            .with_output("step2_output"),
+        TestPhaseConfig::new("step3", "Step 3", "Final processing")
+            .with_input("step2_output")
+            .with_output("final_output"),
     ];
 
     let (manifest, _file) = create_test_manifest(phases);

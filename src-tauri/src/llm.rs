@@ -1,10 +1,10 @@
-use serde::{Deserialize, Serialize};
-use reqwest::Client;
-use anyhow::{Result, anyhow};
-use std::time::{Duration, Instant};
-use std::collections::HashMap;
+use anyhow::{anyhow, Result};
 use futures::stream::{Stream, StreamExt};
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::pin::Pin;
+use std::time::{Duration, Instant};
 use thiserror::Error;
 
 // ------------------------------------------------------------------
@@ -57,10 +57,10 @@ pub enum CircuitBreakerError {
 /// Token bucket rate limiter for controlling request frequency
 #[derive(Debug, Clone)]
 pub struct RateLimiter {
-    pub(crate) tokens: f64,              // IM-3020-F1: Current available tokens
-    pub(crate) capacity: f64,            // IM-3020-F2: Maximum tokens (requests per minute)
-    pub(crate) refill_rate: f64,         // IM-3020-F3: Tokens added per second (capacity / 60)
-    pub(crate) last_refill: Instant,     // IM-3020-F4: Last token refill timestamp
+    pub(crate) tokens: f64,          // IM-3020-F1: Current available tokens
+    pub(crate) capacity: f64,        // IM-3020-F2: Maximum tokens (requests per minute)
+    pub(crate) refill_rate: f64,     // IM-3020-F3: Tokens added per second (capacity / 60)
+    pub(crate) last_refill: Instant, // IM-3020-F4: Last token refill timestamp
 }
 
 impl RateLimiter {
@@ -81,21 +81,22 @@ impl RateLimiter {
     pub fn try_acquire(&mut self) -> Result<(), Duration> {
         self.refill();
 
-        if self.tokens >= 1.0 {  // IM-3022-B1: Branch - token availability
+        if self.tokens >= 1.0 {
+            // IM-3022-B1: Branch - token availability
             self.tokens -= 1.0;
             Ok(())
         } else {
             // IM-3022-V1: Calculate wait time for next token
             let wait_seconds = (1.0 - self.tokens) / self.refill_rate;
-            Err(Duration::from_secs_f64(wait_seconds))  // IM-3022-E1: Rate limit error
+            Err(Duration::from_secs_f64(wait_seconds)) // IM-3022-E1: Rate limit error
         }
     }
 
     /// Refill tokens based on elapsed time
     /// IM-3023: refill() method
     fn refill(&mut self) {
-        let now = Instant::now();  // IM-3023-V1: Current time
-        let elapsed = now.duration_since(self.last_refill).as_secs_f64();  // IM-3023-V2: Elapsed time
+        let now = Instant::now(); // IM-3023-V1: Current time
+        let elapsed = now.duration_since(self.last_refill).as_secs_f64(); // IM-3023-V2: Elapsed time
         self.tokens = (self.tokens + elapsed * self.refill_rate).min(self.capacity);
         self.last_refill = now;
     }
@@ -115,31 +116,27 @@ impl RateLimiter {
 /// IM-3031: CircuitState enum
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CircuitState {
-    Closed,      // Normal operation, requests allowed
-    Open,        // Blocking all requests due to failures
-    HalfOpen,    // Testing recovery with limited requests
+    Closed,   // Normal operation, requests allowed
+    Open,     // Blocking all requests due to failures
+    HalfOpen, // Testing recovery with limited requests
 }
 
 /// Circuit breaker for LLM provider failure protection
 #[derive(Debug, Clone)]
 pub struct CircuitBreaker {
-    state: CircuitState,                      // IM-3030-F1: Current state
-    failure_count: u32,                       // IM-3030-F2: Consecutive failures
-    pub(crate) failure_threshold: u32,        // IM-3030-F3: Failures to trigger Open (5)
-    success_count: u32,                       // IM-3030-F4: Consecutive successes in HalfOpen
-    pub(crate) success_threshold: u32,        // IM-3030-F5: Successes to close (2)
-    open_until: Option<Instant>,              // IM-3030-F6: Timeout expiration
-    pub(crate) timeout_duration: Duration,    // IM-3030-F7: Open state timeout (60s)
+    state: CircuitState,                   // IM-3030-F1: Current state
+    failure_count: u32,                    // IM-3030-F2: Consecutive failures
+    pub(crate) failure_threshold: u32,     // IM-3030-F3: Failures to trigger Open (5)
+    success_count: u32,                    // IM-3030-F4: Consecutive successes in HalfOpen
+    pub(crate) success_threshold: u32,     // IM-3030-F5: Successes to close (2)
+    open_until: Option<Instant>,           // IM-3030-F6: Timeout expiration
+    pub(crate) timeout_duration: Duration, // IM-3030-F7: Open state timeout (60s)
 }
 
 impl CircuitBreaker {
     /// Create a new CircuitBreaker with default thresholds
     /// IM-3033: Constructor
-    pub fn new(
-        failure_threshold: u32,
-        success_threshold: u32,
-        timeout_duration: Duration,
-    ) -> Self {
+    pub fn new(failure_threshold: u32, success_threshold: u32, timeout_duration: Duration) -> Self {
         Self {
             state: CircuitState::Closed,
             failure_count: 0,
@@ -180,11 +177,11 @@ impl CircuitBreaker {
         // Execute the function
         match f() {
             Ok(result) => {
-                self.on_success();  // IM-3035: on_success() handler
+                self.on_success(); // IM-3035: on_success() handler
                 Ok(result)
             }
             Err(error) => {
-                self.on_failure();  // IM-3036: on_failure() handler
+                self.on_failure(); // IM-3036: on_failure() handler
                 Err(CircuitBreakerError::RequestFailed(error.to_string()))
             }
         }
@@ -346,22 +343,22 @@ impl LLMClient {
         let mut circuit_breakers = HashMap::new();
 
         // Configure rate limits per provider (from L1-SAD REQ-SYS-003)
-        rate_limiters.insert("anthropic".to_string(), RateLimiter::new(50.0));  // 50 RPM
-        rate_limiters.insert("google".to_string(), RateLimiter::new(60.0));     // 60 RPM
-        rate_limiters.insert("deepseek".to_string(), RateLimiter::new(100.0));  // 100 RPM
+        rate_limiters.insert("anthropic".to_string(), RateLimiter::new(50.0)); // 50 RPM
+        rate_limiters.insert("google".to_string(), RateLimiter::new(60.0)); // 60 RPM
+        rate_limiters.insert("deepseek".to_string(), RateLimiter::new(100.0)); // 100 RPM
 
         // Configure circuit breakers per provider
         circuit_breakers.insert(
             "anthropic".to_string(),
-            CircuitBreaker::new(5, 2, Duration::from_secs(60))
+            CircuitBreaker::new(5, 2, Duration::from_secs(60)),
         );
         circuit_breakers.insert(
             "google".to_string(),
-            CircuitBreaker::new(5, 2, Duration::from_secs(60))
+            CircuitBreaker::new(5, 2, Duration::from_secs(60)),
         );
         circuit_breakers.insert(
             "deepseek".to_string(),
-            CircuitBreaker::new(5, 2, Duration::from_secs(60))
+            CircuitBreaker::new(5, 2, Duration::from_secs(60)),
         );
 
         Self {
@@ -402,7 +399,8 @@ impl LLMClient {
                         provider_name, wait_duration
                     );
                     tokio::time::sleep(wait_duration).await;
-                    limiter.try_acquire()
+                    limiter
+                        .try_acquire()
                         .map_err(|_| LLMError::RateLimitExceeded(provider_name.to_string()))?;
                 }
             }
@@ -413,7 +411,7 @@ impl LLMClient {
             breaker.call(|| {
                 // Execute provider request synchronously for circuit breaker
                 // We'll handle async in the actual implementation
-                Ok::<String, String>(String::new())  // Placeholder
+                Ok::<String, String>(String::new()) // Placeholder
             })
         } else {
             Ok(String::new())
@@ -432,15 +430,11 @@ impl LLMClient {
                     Err(anyhow!("Unsupported model: {}", req.model))
                 }
             }
-            Err(CircuitBreakerError::Open) => {
-                Err(anyhow!(
-                    "{} circuit breaker is open (too many failures)",
-                    provider_name
-                ))
-            }
-            Err(CircuitBreakerError::RequestFailed(e)) => {
-                Err(anyhow!("Request failed: {}", e))
-            }
+            Err(CircuitBreakerError::Open) => Err(anyhow!(
+                "{} circuit breaker is open (too many failures)",
+                provider_name
+            )),
+            Err(CircuitBreakerError::RequestFailed(e)) => Err(anyhow!("Request failed: {}", e)),
         }
     }
 
@@ -458,8 +452,9 @@ impl LLMClient {
                 Ok(()) => {}
                 Err(wait_duration) => {
                     tokio::time::sleep(wait_duration).await;
-                    limiter.try_acquire()
-                        .map_err(|_| anyhow!(LLMError::RateLimitExceeded(provider_name.to_string())))?;
+                    limiter.try_acquire().map_err(|_| {
+                        anyhow!(LLMError::RateLimitExceeded(provider_name.to_string()))
+                    })?;
                 }
             }
         }
@@ -472,7 +467,10 @@ impl LLMClient {
         } else if request.model.starts_with("deepseek") {
             self.generate_deepseek_stream(request).await
         } else {
-            Err(anyhow!("Unsupported model for streaming: {}", request.model))
+            Err(anyhow!(
+                "Unsupported model for streaming: {}",
+                request.model
+            ))
         }
     }
 
@@ -495,7 +493,9 @@ impl LLMClient {
             ]
         });
 
-        let res = self.client.post(url)
+        let res = self
+            .client
+            .post(url)
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", "2023-06-01")
             .header("content-type", "application/json")
@@ -509,7 +509,9 @@ impl LLMClient {
 
         let anthropic_res: AnthropicResponse = res.json().await?;
 
-        anthropic_res.content.first()
+        anthropic_res
+            .content
+            .first()
             .map(|c| c.text.clone())
             .ok_or_else(|| anyhow!("No content in Anthropic response"))
     }
@@ -528,7 +530,9 @@ impl LLMClient {
             }]
         });
 
-        let res = self.client.post(&url)
+        let res = self
+            .client
+            .post(&url)
             .header("content-type", "application/json")
             .json(&body)
             .send()
@@ -540,7 +544,9 @@ impl LLMClient {
 
         let gemini_res: GeminiResponse = res.json().await?;
 
-        gemini_res.candidates.first()
+        gemini_res
+            .candidates
+            .first()
             .and_then(|c| c.content.parts.first())
             .map(|p| p.text.clone())
             .ok_or_else(|| anyhow!("No content in Gemini response"))
@@ -558,7 +564,9 @@ impl LLMClient {
             "stream": false
         });
 
-        let res = self.client.post(url)
+        let res = self
+            .client
+            .post(url)
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("content-type", "application/json")
             .json(&body)
@@ -571,7 +579,9 @@ impl LLMClient {
 
         let deepseek_res: DeepSeekResponse = res.json().await?;
 
-        deepseek_res.choices.first()
+        deepseek_res
+            .choices
+            .first()
             .map(|c| c.message.content.clone())
             .ok_or_else(|| anyhow!("No content in DeepSeek response"))
     }
@@ -599,7 +609,9 @@ impl LLMClient {
             "stream": true
         });
 
-        let res = self.client.post(url)
+        let res = self
+            .client
+            .post(url)
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", "2023-06-01")
             .header("content-type", "application/json")
@@ -625,7 +637,9 @@ impl LLMClient {
                                 return None;
                             }
 
-                            if let Ok(event) = serde_json::from_str::<AnthropicStreamEvent>(json_str) {
+                            if let Ok(event) =
+                                serde_json::from_str::<AnthropicStreamEvent>(json_str)
+                            {
                                 if event.event_type == "content_block_delta" {
                                     if let Some(delta) = event.delta {
                                         if let Some(text) = delta.text {
@@ -664,7 +678,9 @@ impl LLMClient {
             }]
         });
 
-        let res = self.client.post(&url)
+        let res = self
+            .client
+            .post(&url)
             .header("content-type", "application/json")
             .json(&body)
             .send()
@@ -717,7 +733,9 @@ impl LLMClient {
             "stream": true
         });
 
-        let res = self.client.post(url)
+        let res = self
+            .client
+            .post(url)
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("content-type", "application/json")
             .json(&body)
@@ -742,7 +760,9 @@ impl LLMClient {
                                 return None;
                             }
 
-                            if let Ok(chunk_data) = serde_json::from_str::<DeepSeekStreamChunk>(json_str) {
+                            if let Ok(chunk_data) =
+                                serde_json::from_str::<DeepSeekStreamChunk>(json_str)
+                            {
                                 if let Some(choice) = chunk_data.choices.first() {
                                     if let Some(content) = &choice.delta.content {
                                         return Some(Ok(content.clone()));
@@ -780,8 +800,11 @@ mod tests {
         let requests_per_minute = 60.0;
         let mut limiter = RateLimiter::new(requests_per_minute);
 
-        assert_eq!(limiter.available_tokens(), 60.0,
-                   "Tokens should initialize to requests_per_minute");
+        assert_eq!(
+            limiter.available_tokens(),
+            60.0,
+            "Tokens should initialize to requests_per_minute"
+        );
     }
 
     #[test]
@@ -791,8 +814,10 @@ mod tests {
 
         // Capacity prevents token accumulation beyond limit
         std::thread::sleep(Duration::from_secs(2));
-        assert!(limiter.available_tokens() <= 100.0,
-                "Tokens should never exceed capacity");
+        assert!(
+            limiter.available_tokens() <= 100.0,
+            "Tokens should never exceed capacity"
+        );
     }
 
     #[test]
@@ -801,8 +826,10 @@ mod tests {
         let mut limiter = RateLimiter::new(60.0);
 
         // refill_rate should be RPM / 60 = 1.0 token per second
-        assert_eq!(limiter.refill_rate, 1.0,
-                   "Refill rate should be requests_per_minute / 60");
+        assert_eq!(
+            limiter.refill_rate, 1.0,
+            "Refill rate should be requests_per_minute / 60"
+        );
     }
 
     #[test]
@@ -813,8 +840,10 @@ mod tests {
 
         // last_refill should be initialized near current time
         let elapsed = creation_time.duration_since(limiter.last_refill);
-        assert!(elapsed < Duration::from_millis(100),
-                "last_refill should be initialized to Instant::now()");
+        assert!(
+            elapsed < Duration::from_millis(100),
+            "last_refill should be initialized to Instant::now()"
+        );
     }
 
     #[test]
@@ -825,8 +854,10 @@ mod tests {
         assert_eq!(limiter.tokens, 120.0, "tokens should equal capacity");
         assert_eq!(limiter.capacity, 120.0, "capacity should equal parameter");
         assert_eq!(limiter.refill_rate, 2.0, "refill_rate should be RPM/60");
-        assert!(limiter.last_refill.elapsed() < Duration::from_millis(100),
-                "last_refill should be recent");
+        assert!(
+            limiter.last_refill.elapsed() < Duration::from_millis(100),
+            "last_refill should be recent"
+        );
     }
 
     #[test]
@@ -843,8 +874,10 @@ mod tests {
         match limiter.try_acquire() {
             Err(wait_duration) => {
                 // Should wait ~1 second for next token
-                assert!((wait_duration.as_secs_f64() - 1.0).abs() < 0.1,
-                        "Wait should be ~1 second for next token");
+                assert!(
+                    (wait_duration.as_secs_f64() - 1.0).abs() < 0.1,
+                    "Wait should be ~1 second for next token"
+                );
             }
             Ok(_) => panic!("Should require wait when tokens exhausted"),
         }
@@ -856,8 +889,10 @@ mod tests {
         let mut limiter = RateLimiter::new(10.0);
 
         // TRUE branch: tokens available
-        assert!(limiter.try_acquire().is_ok(),
-                "Should succeed when tokens >= 1.0");
+        assert!(
+            limiter.try_acquire().is_ok(),
+            "Should succeed when tokens >= 1.0"
+        );
 
         // Exhaust tokens
         for _ in 0..9 {
@@ -865,8 +900,10 @@ mod tests {
         }
 
         // FALSE branch: no tokens available
-        assert!(limiter.try_acquire().is_err(),
-                "Should fail when tokens < 1.0");
+        assert!(
+            limiter.try_acquire().is_err(),
+            "Should fail when tokens < 1.0"
+        );
     }
 
     #[test]
@@ -882,8 +919,10 @@ mod tests {
         // Next request should return Err with wait duration
         match limiter.try_acquire() {
             Err(duration) => {
-                assert!(duration.as_secs_f64() > 0.0,
-                        "Error should contain wait duration");
+                assert!(
+                    duration.as_secs_f64() > 0.0,
+                    "Error should contain wait duration"
+                );
             }
             Ok(_) => panic!("Should return Err when rate limited"),
         }
@@ -899,8 +938,10 @@ mod tests {
         limiter.refill();
 
         // After 1 second, should have ~1 token refilled
-        assert!(limiter.available_tokens() >= 59.9,
-                "Should refill ~1 token per second");
+        assert!(
+            limiter.available_tokens() >= 59.9,
+            "Should refill ~1 token per second"
+        );
     }
 
     #[test]
@@ -918,8 +959,10 @@ mod tests {
         limiter.refill();
 
         // Should have ~111 tokens (110 + 1 refilled)
-        assert!((limiter.available_tokens() - 111.0).abs() < 1.0,
-                "Should refill based on elapsed time");
+        assert!(
+            (limiter.available_tokens() - 111.0).abs() < 1.0,
+            "Should refill based on elapsed time"
+        );
     }
 
     #[test]
@@ -927,12 +970,18 @@ mod tests {
         // TEST-UNIT-3024: Verify available_tokens() returns current token count
         let mut limiter = RateLimiter::new(100.0);
 
-        assert_eq!(limiter.available_tokens(), 100.0,
-                   "Should return full capacity initially");
+        assert_eq!(
+            limiter.available_tokens(),
+            100.0,
+            "Should return full capacity initially"
+        );
 
         limiter.try_acquire().unwrap();
-        assert_eq!(limiter.available_tokens(), 99.0,
-                   "Should return tokens after consumption");
+        assert_eq!(
+            limiter.available_tokens(),
+            99.0,
+            "Should return tokens after consumption"
+        );
     }
 
     #[tokio::test]
@@ -943,7 +992,7 @@ mod tests {
         // Manually set low rate limit for testing
         client.rate_limiters.insert(
             "anthropic".to_string(),
-            RateLimiter::new(2.0) // 2 RPM = very low for testing
+            RateLimiter::new(2.0), // 2 RPM = very low for testing
         );
 
         // First 2 requests should succeed quickly
@@ -967,10 +1016,14 @@ mod tests {
         let _ = client.generate(req1.clone()).await;
         let elapsed_third = start_third.elapsed();
 
-        assert!(elapsed_first_two.as_secs() < 5,
-                "First 2 requests should be fast (no rate limiting)");
-        assert!(elapsed_third.as_secs() >= 25,
-                "Third request should wait for rate limit (~30s for next token)");
+        assert!(
+            elapsed_first_two.as_secs() < 5,
+            "First 2 requests should be fast (no rate limiting)"
+        );
+        assert!(
+            elapsed_third.as_secs() >= 25,
+            "Third request should wait for rate limit (~30s for next token)"
+        );
     }
 
     // ------------------------------------------------------------------
@@ -982,8 +1035,11 @@ mod tests {
         // TEST-UNIT-3030-F1: Verify state field initializes to Closed
         let mut breaker = CircuitBreaker::new(5, 2, Duration::from_secs(60));
 
-        assert_eq!(breaker.state(), CircuitState::Closed,
-                   "Circuit breaker should start in Closed state");
+        assert_eq!(
+            breaker.state(),
+            CircuitState::Closed,
+            "Circuit breaker should start in Closed state"
+        );
     }
 
     #[test]
@@ -1035,19 +1091,22 @@ mod tests {
 
         // Fail 3 times (threshold)
         for _ in 0..3 {
-            let _: Result<(), _> = breaker.call(|| {
-                Err("test error")
-            });
+            let _: Result<(), _> = breaker.call(|| Err("test error"));
         }
 
         // Circuit should be Open
-        assert_eq!(breaker.state(), CircuitState::Open,
-                   "Should transition to Open after 3 failures");
+        assert_eq!(
+            breaker.state(),
+            CircuitState::Open,
+            "Should transition to Open after 3 failures"
+        );
 
         // Next request should be rejected immediately
         let result = breaker.call(|| Ok::<_, &str>(42));
-        assert!(matches!(result, Err(CircuitBreakerError::Open)),
-                "Should block requests when Open");
+        assert!(
+            matches!(result, Err(CircuitBreakerError::Open)),
+            "Should block requests when Open"
+        );
     }
 
     #[test]
@@ -1066,8 +1125,10 @@ mod tests {
         let _result = breaker.call(|| Ok::<_, &str>(42));
 
         // Should be in HalfOpen state now (not necessarily Closed yet)
-        assert!(breaker.state() == CircuitState::HalfOpen || breaker.state() == CircuitState::Closed,
-                "Should transition to HalfOpen after timeout");
+        assert!(
+            breaker.state() == CircuitState::HalfOpen || breaker.state() == CircuitState::Closed,
+            "Should transition to HalfOpen after timeout"
+        );
     }
 
     #[test]
@@ -1087,8 +1148,11 @@ mod tests {
         let _ = breaker.call(|| Ok::<_, &str>(2));
 
         // Circuit should be Closed
-        assert_eq!(breaker.state(), CircuitState::Closed,
-                   "Should close after 2 successes in HalfOpen");
+        assert_eq!(
+            breaker.state(),
+            CircuitState::Closed,
+            "Should close after 2 successes in HalfOpen"
+        );
     }
 
     #[tokio::test]
@@ -1154,7 +1218,10 @@ mod tests {
 
         // Trait definition check (compile-time verification)
         // The existence of generate_stream in LLMClient proves the trait method exists
-        assert!(true, "LLMProvider trait with generate_stream() method exists");
+        assert!(
+            true,
+            "LLMProvider trait with generate_stream() method exists"
+        );
     }
 
     // Note: Provider-specific streaming format tests (IM-3015-STREAM-1/2/3)
@@ -1173,132 +1240,155 @@ mod tests {
     fn test_llmclient_constructor() {
         // TEST-UNIT-LLMCLIENT-001: Verify LLMClient::new() initializes correctly
         // Purpose: Validate constructor creates client with all required fields
-        
+
         let api_key = "sk-ant-test-key-12345".to_string();
         let _client = LLMClient::new(api_key);
-        
+
         // If constructor succeeds without panic, test passes
         assert!(true, "LLMClient constructor should succeed");
     }
-    
+
     #[test]
     fn test_detect_provider_anthropic() {
         // TEST-UNIT-LLMCLIENT-002: Verify detect_provider() identifies Anthropic models
         // Purpose: Validate provider detection for claude-* model names
-        
+
         let client = LLMClient::new("test-key".to_string());
-        
-        let provider = client.detect_provider("claude-sonnet-4-5-20250929").unwrap();
-        assert_eq!(provider, "anthropic", "Should detect anthropic from claude model");
-        
+
+        let provider = client
+            .detect_provider("claude-sonnet-4-5-20250929")
+            .unwrap();
+        assert_eq!(
+            provider, "anthropic",
+            "Should detect anthropic from claude model"
+        );
+
         let provider2 = client.detect_provider("claude-3-opus").unwrap();
-        assert_eq!(provider2, "anthropic", "Should detect anthropic from claude-3-opus");
+        assert_eq!(
+            provider2, "anthropic",
+            "Should detect anthropic from claude-3-opus"
+        );
     }
-    
+
     #[test]
     fn test_detect_provider_google() {
         // TEST-UNIT-LLMCLIENT-003: Verify detect_provider() identifies Google models
         // Purpose: Validate provider detection for gemini-* model names
-        
+
         let client = LLMClient::new("test-key".to_string());
-        
+
         let provider = client.detect_provider("gemini-pro").unwrap();
         assert_eq!(provider, "google", "Should detect google from gemini model");
-        
+
         let provider2 = client.detect_provider("gemini-1.5-pro").unwrap();
-        assert_eq!(provider2, "google", "Should detect google from gemini-1.5-pro");
+        assert_eq!(
+            provider2, "google",
+            "Should detect google from gemini-1.5-pro"
+        );
     }
-    
+
     #[test]
     fn test_detect_provider_deepseek() {
         // TEST-UNIT-LLMCLIENT-004: Verify detect_provider() identifies DeepSeek models
         // Purpose: Validate provider detection for deepseek-* model names
-        
+
         let client = LLMClient::new("test-key".to_string());
-        
+
         let provider = client.detect_provider("deepseek-chat").unwrap();
-        assert_eq!(provider, "deepseek", "Should detect deepseek from deepseek-chat");
-        
+        assert_eq!(
+            provider, "deepseek",
+            "Should detect deepseek from deepseek-chat"
+        );
+
         let provider2 = client.detect_provider("deepseek-coder").unwrap();
-        assert_eq!(provider2, "deepseek", "Should detect deepseek from deepseek-coder");
+        assert_eq!(
+            provider2, "deepseek",
+            "Should detect deepseek from deepseek-coder"
+        );
     }
-    
+
     #[test]
     fn test_detect_provider_unsupported_model() {
         // TEST-UNIT-LLMCLIENT-005: Verify detect_provider() rejects unknown models
         // Purpose: Validate error handling for unsupported model names
-        
+
         let client = LLMClient::new("test-key".to_string());
-        
+
         let result = client.detect_provider("gpt-4");
         assert!(result.is_err(), "Should return error for unsupported model");
-        
+
         let result2 = client.detect_provider("llama-3");
         assert!(result2.is_err(), "Should return error for llama-3");
-        
+
         let result3 = client.detect_provider("unknown-model");
         assert!(result3.is_err(), "Should return error for unknown-model");
     }
-    
+
     #[test]
     fn test_llmrequest_struct_creation() {
         // TEST-UNIT-LLMCLIENT-006: Verify LLMRequest struct can be created
         // Purpose: Validate request struct initialization
-        
+
         let request = LLMRequest {
             system: "You are a helpful assistant".to_string(),
             user: "Hello, world!".to_string(),
             model: "claude-sonnet-4-5-20250929".to_string(),
         };
-        
+
         assert_eq!(request.system, "You are a helpful assistant");
         assert_eq!(request.user, "Hello, world!");
         assert_eq!(request.model, "claude-sonnet-4-5-20250929");
     }
-    
+
     #[test]
     fn test_llmerror_network_error_variant() {
         // TEST-UNIT-LLMCLIENT-007: Verify LLMError::NetworkError variant exists
         // Purpose: Validate error enum has NetworkError variant
-        
+
         let error = LLMError::NetworkError("Connection failed".to_string());
         let error_msg = format!("{:?}", error);
-        
-        assert!(error_msg.contains("NetworkError"), "Error should be NetworkError variant");
+
+        assert!(
+            error_msg.contains("NetworkError"),
+            "Error should be NetworkError variant"
+        );
     }
-    
+
     #[test]
     fn test_llmerror_unsupported_model_variant() {
         // TEST-UNIT-LLMCLIENT-008: Verify LLMError::UnsupportedModel variant exists
         // Purpose: Validate error enum has UnsupportedModel variant
-        
+
         let error = LLMError::UnsupportedModel("gpt-4".to_string());
         let error_msg = format!("{:?}", error);
-        
-        assert!(error_msg.contains("UnsupportedModel"), "Error should be UnsupportedModel variant");
+
+        assert!(
+            error_msg.contains("UnsupportedModel"),
+            "Error should be UnsupportedModel variant"
+        );
     }
-    
+
     #[test]
     fn test_llmclient_initializes_rate_limiters() {
         // TEST-UNIT-LLMCLIENT-009: Verify LLMClient initializes rate limiters for all providers
         // Purpose: Validate rate limiters are created during construction
-        
+
         let client = LLMClient::new("test-key".to_string());
-        
+
         // Indirectly verified - if client created successfully, rate limiters exist
         // Cannot directly access private fields, but can verify via provider detection
         assert!(client.detect_provider("claude-sonnet-4-5-20250929").is_ok());
         assert!(client.detect_provider("gemini-pro").is_ok());
         assert!(client.detect_provider("deepseek-chat").is_ok());
     }
-    
+
     #[test]
     fn test_llmclient_initializes_circuit_breakers() {
         // TEST-UNIT-LLMCLIENT-010: Verify LLMClient initializes circuit breakers for all providers
         // Purpose: Validate circuit breakers are created during construction
-        
+
         let client = LLMClient::new("test-key".to_string());
-        
+
         // Indirectly verified - if client created successfully, circuit breakers exist
         // Cannot directly access private fields, but successful construction implies creation
         assert!(true, "Client created with circuit breakers");

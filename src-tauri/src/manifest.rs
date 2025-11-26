@@ -1,8 +1,8 @@
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use anyhow::{Result, Context};
 
 // ------------------------------------------------------------------
 // Data Structures (Matching the YAML Schema)
@@ -73,10 +73,10 @@ impl Manifest {
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let content = fs::read_to_string(&path)
             .with_context(|| format!("Failed to read manifest file: {:?}", path.as_ref()))?;
-        
-        let manifest: Manifest = serde_yaml::from_str(&content)
-            .with_context(|| "Failed to parse YAML manifest")?;
-            
+
+        let manifest: Manifest =
+            serde_yaml::from_str(&content).with_context(|| "Failed to parse YAML manifest")?;
+
         Ok(manifest)
     }
 
@@ -126,10 +126,13 @@ quality_gates:
         write!(file, "{}", yaml_content).unwrap();
 
         let manifest = Manifest::load_from_file(file.path()).unwrap();
-        
+
         assert_eq!(manifest.manifest.id, "PROTO-TEST-001");
         assert_eq!(manifest.phases.len(), 1);
         assert_eq!(manifest.phases[0].tools[0], "search");
-        assert_eq!(manifest.schemas.get("TestSchema").unwrap().fields[0].name, "test_field");
+        assert_eq!(
+            manifest.schemas.get("TestSchema").unwrap().fields[0].name,
+            "test_field"
+        );
     }
 }

@@ -1,9 +1,9 @@
-use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
-use anyhow::{Result, anyhow};
-use tauri::{Emitter, Window}; // Import Tauri Emitter traits
-use crate::manifest::{Manifest, Phase};
 use crate::llm::{LLMClient, LLMRequest};
+use crate::manifest::{Manifest, Phase};
+use anyhow::{anyhow, Result};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use tauri::{Emitter, Window}; // Import Tauri Emitter traits
 
 // ------------------------------------------------------------------
 // Event Payloads (Sent to Frontend)
@@ -80,25 +80,27 @@ impl Agent {
     }
 
     pub async fn run_workflow(&mut self, initial_input: &str) -> Result<()> {
-        self.state.context.insert("target_company".to_string(), initial_input.to_string());
-        
+        self.state
+            .context
+            .insert("target_company".to_string(), initial_input.to_string());
+
         let phases = self.manifest.phases.clone();
 
         for phase in phases {
             self.state.current_phase_id = Some(phase.id.clone());
             self.update_phase_status(&phase.id, PhaseStatus::Running);
-            
+
             match self.execute_phase(&phase).await {
                 Ok(output) => {
                     self.log(&format!("Phase {} completed.", phase.name));
                     self.update_phase_status(&phase.id, PhaseStatus::Completed);
-                    
+
                     if let Some(target) = &phase.output_target {
-                         self.state.context.insert(target.clone(), output);
+                        self.state.context.insert(target.clone(), output);
                     } else if let Some(schema) = &phase.output_schema {
-                         self.state.context.insert(schema.clone(), output);
+                        self.state.context.insert(schema.clone(), output);
                     }
-                },
+                }
                 Err(e) => {
                     self.log(&format!("Phase {} failed: {}", phase.name, e));
                     self.update_phase_status(&phase.id, PhaseStatus::Failed(e.to_string()));
@@ -106,7 +108,7 @@ impl Agent {
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -114,7 +116,9 @@ impl Agent {
         self.log(&format!("Executing Phase: {}", phase.name));
 
         let input_data = if let Some(input_key) = &phase.input {
-            self.state.context.get(input_key)
+            self.state
+                .context
+                .get(input_key)
                 .ok_or_else(|| anyhow!("Missing input: {}", input_key))?
                 .clone()
         } else {
@@ -122,16 +126,15 @@ impl Agent {
         };
 
         let system_prompt = format!(
-            "You are an autonomous research agent executing phase '{}'.\nInstructions:\n{}", 
-            phase.name, 
-            phase.instructions
+            "You are an autonomous research agent executing phase '{}'.\nInstructions:\n{}",
+            phase.name, phase.instructions
         );
 
         // --- REAL IMPLEMENTATION SWITCH ---
         // If we had a search tool, we'd call it here.
-        // Since we don't have the Tavily crate installed yet, we'll rely on LLM hallucination/knowledge 
+        // Since we don't have the Tavily crate installed yet, we'll rely on LLM hallucination/knowledge
         // for the 'search' phases just to make the loop work for this demo.
-        
+
         let model = "claude-3-5-sonnet"; // Default to Claude
 
         let req = LLMRequest {
@@ -139,7 +142,7 @@ impl Agent {
             user: input_data,
             model: model.to_string(),
         };
-        
+
         self.llm_client.generate(req).await
     }
 
@@ -147,14 +150,21 @@ impl Agent {
     fn log(&self, msg: &str) {
         println!("[AGENT] {}", msg);
         if let Some(window) = &self.window {
-            let _ = window.emit("agent-log", LogPayload { message: msg.to_string() });
+            let _ = window.emit(
+                "agent-log",
+                LogPayload {
+                    message: msg.to_string(),
+                },
+            );
         }
     }
 
     // Helper to update status AND emit to frontend
     fn update_phase_status(&mut self, phase_id: &str, status: PhaseStatus) {
-        self.state.phase_statuses.insert(phase_id.to_string(), status.clone());
-        
+        self.state
+            .phase_statuses
+            .insert(phase_id.to_string(), status.clone());
+
         let status_str = match status {
             PhaseStatus::Running => "running",
             PhaseStatus::Completed => "completed",
@@ -163,10 +173,13 @@ impl Agent {
         };
 
         if let Some(window) = &self.window {
-            let _ = window.emit("phase-update", PhaseUpdatePayload { 
-                phase_id: phase_id.to_string(), 
-                status: status_str.to_string() 
-            });
+            let _ = window.emit(
+                "phase-update",
+                PhaseUpdatePayload {
+                    phase_id: phase_id.to_string(),
+                    status: status_str.to_string(),
+                },
+            );
         }
     }
 }

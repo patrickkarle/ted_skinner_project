@@ -19,8 +19,8 @@
 
 use fullintel_agent::agent::Agent;
 use fullintel_agent::manifest::Manifest;
-use tempfile::NamedTempFile;
 use std::io::Write;
+use tempfile::NamedTempFile;
 
 // ============================================================================
 // TEST UTILITIES MODULE
@@ -65,7 +65,9 @@ mod test_utils {
     pub fn create_test_manifest(phases: Vec<TestPhaseConfig>) -> (Manifest, NamedTempFile) {
         let yaml_content = create_test_manifest_yaml(phases);
         let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
-        temp_file.write_all(yaml_content.as_bytes()).expect("Failed to write to temp file");
+        temp_file
+            .write_all(yaml_content.as_bytes())
+            .expect("Failed to write to temp file");
         temp_file.flush().expect("Failed to flush temp file");
 
         let manifest = Manifest::load_from_file(temp_file.path().to_str().unwrap())
@@ -76,7 +78,8 @@ mod test_utils {
 
     /// Generate YAML content from phase configs
     fn create_test_manifest_yaml(phases: Vec<TestPhaseConfig>) -> String {
-        let mut yaml = String::from("name: Test Workflow\ndescription: System test workflow\n\nphases:\n");
+        let mut yaml =
+            String::from("name: Test Workflow\ndescription: System test workflow\n\nphases:\n");
 
         for phase in phases {
             yaml.push_str(&format!("  - id: {}\n", phase.id));
@@ -227,10 +230,9 @@ async fn test_cross_component_error_recovery() {
 
     // Scenario 1: Phase requires missing input (phase2 needs "wrong_input", phase1 produces "output1")
     let phases = vec![
-        TestPhaseConfig::new("phase1", "Phase 1", "Do some work")
-            .with_output("output1"),
+        TestPhaseConfig::new("phase1", "Phase 1", "Do some work").with_output("output1"),
         TestPhaseConfig::new("phase2", "Phase 2", "Requires missing input")
-            .with_input("wrong_input")  // NOT produced by phase1
+            .with_input("wrong_input") // NOT produced by phase1
             .with_output("output2"),
         TestPhaseConfig::new("phase3", "Phase 3", "Should never execute")
             .with_input("output2")
@@ -290,8 +292,7 @@ async fn test_context_persistence_across_workflow() {
     // Phase 3: reads "step2_output" → produces "step3_output"
     // Phase 4: reads "step3_output" → produces "final_output"
     let phases = vec![
-        TestPhaseConfig::new("step1", "Step 1", "Initial processing")
-            .with_output("step1_output"),
+        TestPhaseConfig::new("step1", "Step 1", "Initial processing").with_output("step1_output"),
         TestPhaseConfig::new("step2", "Step 2", "Intermediate processing")
             .with_input("step1_output")
             .with_output("step2_output"),
@@ -327,7 +328,10 @@ async fn test_context_persistence_across_workflow() {
             // Context should contain all outputs (if API keys available)
         }
         Err(e) => {
-            println!("⚠️ Pipeline workflow failed (expected without API keys): {}", e);
+            println!(
+                "⚠️ Pipeline workflow failed (expected without API keys): {}",
+                e
+            );
             // Context structure still validated
         }
     }
@@ -361,7 +365,9 @@ phases:
 "#;
 
     let mut temp_file1 = NamedTempFile::new().expect("Failed to create temp file");
-    temp_file1.write_all(invalid_yaml_missing_field.as_bytes()).unwrap();
+    temp_file1
+        .write_all(invalid_yaml_missing_field.as_bytes())
+        .unwrap();
     temp_file1.flush().unwrap();
 
     let result1 = Manifest::load_from_file(temp_file1.path().to_str().unwrap());
@@ -385,7 +391,9 @@ phases:
 "#;
 
     let mut temp_file2 = NamedTempFile::new().expect("Failed to create temp file");
-    temp_file2.write_all(invalid_yaml_duplicate_ids.as_bytes()).unwrap();
+    temp_file2
+        .write_all(invalid_yaml_duplicate_ids.as_bytes())
+        .unwrap();
     temp_file2.flush().unwrap();
 
     let result2 = Manifest::load_from_file(temp_file2.path().to_str().unwrap());
@@ -409,7 +417,9 @@ phases:
 "#;
 
     let mut temp_file3 = NamedTempFile::new().expect("Failed to create temp file");
-    temp_file3.write_all(invalid_yaml_missing_dependency.as_bytes()).unwrap();
+    temp_file3
+        .write_all(invalid_yaml_missing_dependency.as_bytes())
+        .unwrap();
     temp_file3.flush().unwrap();
 
     let result3 = Manifest::load_from_file(temp_file3.path().to_str().unwrap());
@@ -437,10 +447,7 @@ phases:
     temp_file4.flush().unwrap();
 
     let result4 = Manifest::load_from_file(temp_file4.path().to_str().unwrap());
-    assert!(
-        result4.is_ok(),
-        "Valid manifest should load successfully"
-    );
+    assert!(result4.is_ok(), "Valid manifest should load successfully");
     println!("✅ Valid manifest loaded successfully");
 
     // Validates:
@@ -556,7 +563,11 @@ async fn test_rate_limiting_under_sustained_load() {
         match rate_limiter.try_acquire() {
             Ok(()) => {
                 successful_requests += 1;
-                println!("  Request {}: ✅ Acquired token (total: {})", i + 1, successful_requests);
+                println!(
+                    "  Request {}: ✅ Acquired token (total: {})",
+                    i + 1,
+                    successful_requests
+                );
             }
             Err(wait_duration) => {
                 rate_limited_requests += 1;
@@ -610,20 +621,18 @@ async fn test_rate_limiting_under_sustained_load() {
 /// Scenario: Execute 5 failing workflows, verify circuit opens, verify fast failure
 #[tokio::test]
 async fn test_circuit_breaker_cascade_prevention() {
-    use test_utils::{create_test_manifest, TestPhaseConfig};
     use std::time::Instant;
+    use test_utils::{create_test_manifest, TestPhaseConfig};
 
     println!("\n🔬 Test 3.2.2: Circuit Breaker Cascade Prevention");
 
     // Create simple single-phase workflow (will fail without API keys)
-    let phases = vec![
-        TestPhaseConfig::new(
-            "test_phase",
-            "Test Phase",
-            "Generate some content (will fail without API keys)",
-        )
-        .with_output("result"),
-    ];
+    let phases = vec![TestPhaseConfig::new(
+        "test_phase",
+        "Test Phase",
+        "Generate some content (will fail without API keys)",
+    )
+    .with_output("result")];
 
     let (manifest, _file) = create_test_manifest(phases);
 
@@ -719,16 +728,16 @@ async fn test_llm_provider_failover() {
 
     // Anthropic circuit breaker (primary provider)
     let mut anthropic_circuit = CircuitBreaker::new(
-        5,                          // 5 failures to open
-        2,                          // 2 successes to close
-        Duration::from_secs(60),    // 60s timeout
+        5,                       // 5 failures to open
+        2,                       // 2 successes to close
+        Duration::from_secs(60), // 60s timeout
     );
 
     // Google circuit breaker (fallback provider)
     let mut google_circuit = CircuitBreaker::new(
-        5,                          // 5 failures to open
-        2,                          // 2 successes to close
-        Duration::from_secs(60),    // 60s timeout
+        5,                       // 5 failures to open
+        2,                       // 2 successes to close
+        Duration::from_secs(60), // 60s timeout
     );
 
     println!("  ✅ Anthropic circuit: Closed (ready)");
@@ -738,9 +747,8 @@ async fn test_llm_provider_failover() {
     println!("\n📋 Simulating 5 failures to Anthropic provider:");
     for i in 0..5 {
         // Simulate failure by calling circuit breaker with failing function
-        let result = anthropic_circuit.call(|| -> Result<(), String> {
-            Err("Simulated API failure".to_string())
-        });
+        let result = anthropic_circuit
+            .call(|| -> Result<(), String> { Err("Simulated API failure".to_string()) });
 
         println!("  Failure {}: {:?}", i + 1, result);
     }
@@ -800,26 +808,18 @@ async fn test_llm_provider_failover() {
 /// Scenario: Execute 20 workflows rapidly, verify no resource leaks or degradation
 #[tokio::test]
 async fn test_system_stress_rapid_workflows() {
-    use test_utils::{create_test_manifest, TestPhaseConfig};
     use std::time::Instant;
+    use test_utils::{create_test_manifest, TestPhaseConfig};
 
     println!("\n🔬 Test 3.2.4: System Stress Test (20 Rapid Workflows)");
 
     // Create simple 2-phase workflow for stress testing
     let phases = vec![
-        TestPhaseConfig::new(
-            "phase1",
-            "Phase 1",
-            "First phase of workflow",
-        )
-        .with_output("phase1_output"),
-        TestPhaseConfig::new(
-            "phase2",
-            "Phase 2",
-            "Second phase using first phase output",
-        )
-        .with_input("phase1_output")
-        .with_output("final_result"),
+        TestPhaseConfig::new("phase1", "Phase 1", "First phase of workflow")
+            .with_output("phase1_output"),
+        TestPhaseConfig::new("phase2", "Phase 2", "Second phase using first phase output")
+            .with_input("phase1_output")
+            .with_output("final_result"),
     ];
 
     let (manifest, _file) = create_test_manifest(phases);
@@ -886,7 +886,10 @@ async fn test_system_stress_rapid_workflows() {
     if degradation_ratio < degradation_threshold {
         println!("  ✅ No significant degradation detected");
     } else {
-        println!("  ⚠️  Performance degradation detected ({}x threshold)", degradation_threshold);
+        println!(
+            "  ⚠️  Performance degradation detected ({}x threshold)",
+            degradation_threshold
+        );
     }
 
     // Assertions
@@ -917,8 +920,8 @@ async fn test_system_stress_rapid_workflows() {
 /// Scenario: Complex 6-phase workflow with all protective mechanisms active
 #[tokio::test]
 async fn test_complete_system_validation_all_features() {
-    use test_utils::{create_test_manifest, TestPhaseConfig};
     use std::time::Instant;
+    use test_utils::{create_test_manifest, TestPhaseConfig};
 
     println!("\n🔬 Test 3.2.5: Complete System Validation (All Features)");
 
@@ -930,7 +933,6 @@ async fn test_complete_system_validation_all_features() {
             "Discover information about the target company",
         )
         .with_output("discovery_data"),
-
         TestPhaseConfig::new(
             "research",
             "Research Phase",
@@ -938,7 +940,6 @@ async fn test_complete_system_validation_all_features() {
         )
         .with_input("discovery_data")
         .with_output("research_results"),
-
         TestPhaseConfig::new(
             "analysis",
             "Analysis Phase",
@@ -946,7 +947,6 @@ async fn test_complete_system_validation_all_features() {
         )
         .with_input("research_results")
         .with_output("analysis_report"),
-
         TestPhaseConfig::new(
             "synthesis",
             "Synthesis Phase",
@@ -954,7 +954,6 @@ async fn test_complete_system_validation_all_features() {
         )
         .with_input("analysis_report")
         .with_output("synthesis_output"),
-
         TestPhaseConfig::new(
             "validation",
             "Validation Phase",
@@ -962,7 +961,6 @@ async fn test_complete_system_validation_all_features() {
         )
         .with_input("synthesis_output")
         .with_output("validation_results"),
-
         TestPhaseConfig::new(
             "report",
             "Report Generation",
@@ -986,7 +984,9 @@ async fn test_complete_system_validation_all_features() {
     // Execute comprehensive workflow
     println!("\n🚀 Executing complete workflow...");
     let start = Instant::now();
-    let result = agent.run_workflow("TechCorp International - Complete Analysis").await;
+    let result = agent
+        .run_workflow("TechCorp International - Complete Analysis")
+        .await;
     let elapsed = start.elapsed();
 
     println!("\n📊 Workflow Execution Results:");
@@ -1026,10 +1026,7 @@ async fn test_complete_system_validation_all_features() {
     println!("\n🔍 Validation 3: Error Handling");
     if let Err(e) = &result {
         let error_msg = e.to_string();
-        assert!(
-            !error_msg.is_empty(),
-            "Error message should not be empty"
-        );
+        assert!(!error_msg.is_empty(), "Error message should not be empty");
         println!("  ✅ Error message provided: {}", error_msg);
         println!("  ✅ Graceful degradation working");
     } else {
