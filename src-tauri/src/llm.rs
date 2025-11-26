@@ -1412,18 +1412,27 @@ mod tests {
     #[test]
     fn test_rate_limiter_refill_restores_capacity() {
         // TEST-UNIT-LLMCLIENT-012: Refill mechanism restores tokens over time
+        // Note: available_tokens() doesn't trigger refill - only try_acquire() does
         let mut limiter = RateLimiter::new(60.0);
 
-        for _ in 0..3 {
+        // Consume all tokens to deplete the limiter
+        for _ in 0..60 {
             let _ = limiter.try_acquire();
         }
 
-        let before = limiter.available_tokens();
-        assert!(before < 60.0);
+        // Verify depleted - next acquire should fail
+        assert!(
+            limiter.try_acquire().is_err(),
+            "Should be depleted after 60 acquires"
+        );
 
+        // Wait for refill (1.1 seconds should give ~1.1 tokens at 60/minute = 1/second rate)
         std::thread::sleep(Duration::from_millis(1100));
 
-        let after = limiter.available_tokens();
-        assert!(after > before, "Tokens should refill over time");
+        // After waiting, should be able to acquire a token (refill happens in try_acquire)
+        assert!(
+            limiter.try_acquire().is_ok(),
+            "Tokens should refill over time"
+        );
     }
 }
