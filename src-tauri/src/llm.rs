@@ -798,7 +798,7 @@ mod tests {
     fn test_rate_limiter_tokens_field_initialization() {
         // TEST-UNIT-3020-F1: Verify tokens field initializes to full capacity
         let requests_per_minute = 60.0;
-        let mut limiter = RateLimiter::new(requests_per_minute);
+        let limiter = RateLimiter::new(requests_per_minute);
 
         assert_eq!(
             limiter.available_tokens(),
@@ -810,7 +810,7 @@ mod tests {
     #[test]
     fn test_rate_limiter_capacity_field() {
         // TEST-UNIT-3020-F2: Verify capacity field stores maximum token limit
-        let mut limiter = RateLimiter::new(100.0);
+        let limiter = RateLimiter::new(100.0);
 
         // Capacity prevents token accumulation beyond limit
         std::thread::sleep(Duration::from_secs(2));
@@ -823,7 +823,7 @@ mod tests {
     #[test]
     fn test_rate_limiter_refill_rate_calculation() {
         // TEST-UNIT-3020-F3: Verify refill_rate correctly converts RPM to tokens-per-second
-        let mut limiter = RateLimiter::new(60.0);
+        let limiter = RateLimiter::new(60.0);
 
         // refill_rate should be RPM / 60 = 1.0 token per second
         assert_eq!(
@@ -835,7 +835,7 @@ mod tests {
     #[test]
     fn test_rate_limiter_last_refill_timestamp() {
         // TEST-UNIT-3020-F4: Verify last_refill tracks token refill timing
-        let mut limiter = RateLimiter::new(60.0);
+        let limiter = RateLimiter::new(60.0);
         let creation_time = Instant::now();
 
         // last_refill should be initialized near current time
@@ -849,7 +849,7 @@ mod tests {
     #[test]
     fn test_rate_limiter_constructor() {
         // TEST-UNIT-3021: Verify RateLimiter::new() initializes all fields
-        let mut limiter = RateLimiter::new(120.0);
+        let limiter = RateLimiter::new(120.0);
 
         assert_eq!(limiter.tokens, 120.0, "tokens should equal capacity");
         assert_eq!(limiter.capacity, 120.0, "capacity should equal parameter");
@@ -1033,7 +1033,7 @@ mod tests {
     #[test]
     fn test_circuit_breaker_state_field_initialization() {
         // TEST-UNIT-3030-F1: Verify state field initializes to Closed
-        let mut breaker = CircuitBreaker::new(5, 2, Duration::from_secs(60));
+        let breaker = CircuitBreaker::new(5, 2, Duration::from_secs(60));
 
         assert_eq!(
             breaker.state(),
@@ -1074,7 +1074,7 @@ mod tests {
     #[test]
     fn test_circuit_breaker_constructor() {
         // TEST-UNIT-3033: Verify CircuitBreaker::new() initializes all fields
-        let mut breaker = CircuitBreaker::new(3, 2, Duration::from_secs(30));
+        let breaker = CircuitBreaker::new(3, 2, Duration::from_secs(30));
 
         assert_eq!(breaker.state(), CircuitState::Closed);
         assert_eq!(breaker.failure_threshold, 3);
