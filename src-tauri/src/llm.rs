@@ -1218,10 +1218,7 @@ mod tests {
 
         // Trait definition check (compile-time verification)
         // The existence of generate_stream in LLMClient proves the trait method exists
-        assert!(
-            true,
-            "LLMProvider trait with generate_stream() method exists"
-        );
+        // Compile-time verification - trait method exists
     }
 
     // Note: Provider-specific streaming format tests (IM-3015-STREAM-1/2/3)
@@ -1245,7 +1242,7 @@ mod tests {
         let _client = LLMClient::new(api_key);
 
         // If constructor succeeds without panic, test passes
-        assert!(true, "LLMClient constructor should succeed");
+        // Compile-time verification - constructor succeeds
     }
 
     #[test]
@@ -1387,11 +1384,11 @@ mod tests {
         // TEST-UNIT-LLMCLIENT-010: Verify LLMClient initializes circuit breakers for all providers
         // Purpose: Validate circuit breakers are created during construction
 
-        let client = LLMClient::new("test-key".to_string());
+        let _client = LLMClient::new("test-key".to_string());
 
         // Indirectly verified - if client created successfully, circuit breakers exist
         // Cannot directly access private fields, but successful construction implies creation
-        assert!(true, "Client created with circuit breakers");
+        // Compile-time verification - circuit breakers initialized
     }
     // ============================================================================
     // Additional Edge Case Tests - TEST-UNIT-LLMCLIENT-011 through 025

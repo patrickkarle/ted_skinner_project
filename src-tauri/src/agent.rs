@@ -33,7 +33,7 @@ pub enum PhaseStatus {
     Skipped,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct AgentState {
     pub current_phase_id: Option<String>,
     pub phase_statuses: HashMap<String, PhaseStatus>,
@@ -214,7 +214,7 @@ quality_gates: []
     fn test_agent_new_initializes_correctly() {
         let manifest = create_test_manifest();
         let _agent = Agent::new(manifest, "test-key".to_string(), None);
-        assert!(true);
+        // Compile-time verification - Agent constructor succeeds
     }
 
     #[test]
