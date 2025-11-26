@@ -77,24 +77,60 @@ mod test_utils {
     }
 
     /// Generate YAML content from phase configs
+    /// Must match the Manifest struct: manifest header, schemas, phases, quality_gates
     fn create_test_manifest_yaml(phases: Vec<TestPhaseConfig>) -> String {
-        let mut yaml =
-            String::from("name: Test Workflow\ndescription: System test workflow\n\nphases:\n");
+        let mut yaml = String::from(
+            "manifest:
+  id: \"TEST-SYS-001\"
+  version: \"1.0.0\"
+  name: \"System Test\"
+  description: \"System test workflow\"
+
+schemas: {}
+
+phases:
+",
+        );
 
         for phase in phases {
-            yaml.push_str(&format!("  - id: {}\n", phase.id));
-            yaml.push_str(&format!("    name: {}\n", phase.name));
-            yaml.push_str(&format!("    instructions: {}\n", phase.instructions));
+            yaml.push_str(&format!(
+                "  - id: \"{}\"
+",
+                phase.id
+            ));
+            yaml.push_str(&format!(
+                "    name: \"{}\"
+",
+                phase.name
+            ));
+            yaml.push_str(&format!(
+                "    instructions: \"{}\"
+",
+                phase.instructions
+            ));
 
             if let Some(input) = phase.input_key {
-                yaml.push_str(&format!("    input_source: {}\n", input));
+                yaml.push_str(&format!(
+                    "    input: \"{}\"
+",
+                    input
+                ));
             }
 
             if let Some(output) = phase.output_key {
-                yaml.push_str(&format!("    output_target: {}\n", output));
+                yaml.push_str(&format!(
+                    "    output_target: \"{}\"
+",
+                    output
+                ));
             }
         }
 
+        yaml.push_str(
+            "
+quality_gates: []
+",
+        );
         yaml
     }
 
@@ -355,13 +391,18 @@ async fn test_manifest_validation_and_error_reporting() {
 
     // Scenario 1: Missing required phase field (instructions)
     let invalid_yaml_missing_field = r#"
-name: Invalid Workflow
-description: Missing phase instructions
+manifest:
+  id: "TEST-001"
+  version: "1.0.0"
+  name: "Invalid Workflow"
+  description: "Missing phase instructions"
+schemas: {}
 phases:
   - id: test_phase
     name: Test Phase
     # instructions: MISSING!
     output_target: result
+quality_gates: []
 "#;
 
     let mut temp_file1 = NamedTempFile::new().expect("Failed to create temp file");
@@ -377,8 +418,12 @@ phases:
 
     // Scenario 2: Duplicate phase IDs
     let invalid_yaml_duplicate_ids = r#"
-name: Invalid Workflow
-description: Duplicate phase IDs
+manifest:
+  id: "TEST-002"
+  version: "1.0.0"
+  name: "Invalid Workflow"
+  description: "Duplicate phase IDs"
+schemas: {}
 phases:
   - id: discovery
     name: Discovery 1
@@ -388,6 +433,7 @@ phases:
     name: Discovery 2
     instructions: Second discovery
     output_target: output2
+quality_gates: []
 "#;
 
     let mut temp_file2 = NamedTempFile::new().expect("Failed to create temp file");
@@ -402,8 +448,12 @@ phases:
 
     // Scenario 3: Missing input dependencies (phase2 requires input that no phase produces)
     let invalid_yaml_missing_dependency = r#"
-name: Invalid Workflow
-description: Missing input dependencies
+manifest:
+  id: "TEST-003"
+  version: "1.0.0"
+  name: "Invalid Workflow"
+  description: "Missing input dependencies"
+schemas: {}
 phases:
   - id: phase1
     name: Phase 1
@@ -412,8 +462,9 @@ phases:
   - id: phase2
     name: Phase 2
     instructions: Do something else
-    input_source: nonexistent_input
+    input: nonexistent_input
     output_target: output2
+quality_gates: []
 "#;
 
     let mut temp_file3 = NamedTempFile::new().expect("Failed to create temp file");
@@ -428,8 +479,12 @@ phases:
 
     // Scenario 4: Valid manifest (should succeed)
     let valid_yaml = r#"
-name: Valid Workflow
-description: All fields correct
+manifest:
+  id: "TEST-004"
+  version: "1.0.0"
+  name: "Valid Workflow"
+  description: "All fields correct"
+schemas: {}
 phases:
   - id: phase1
     name: Phase 1
@@ -438,8 +493,9 @@ phases:
   - id: phase2
     name: Phase 2
     instructions: Do follow-up work
-    input_source: output1
+    input: output1
     output_target: output2
+quality_gates: []
 "#;
 
     let mut temp_file4 = NamedTempFile::new().expect("Failed to create temp file");
