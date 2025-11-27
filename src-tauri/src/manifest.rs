@@ -56,6 +56,10 @@ pub struct Phase {
     pub output_format: Option<String>,
     #[serde(default)]
     pub logic_map: Option<HashMap<String, HashMap<String, String>>>,
+    /// LLM model to use for this phase (e.g., "claude-3-5-sonnet", "gemini-1.5-flash")
+    /// If not specified, defaults to "claude-3-5-sonnet"
+    #[serde(default)]
+    pub model: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]

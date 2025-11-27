@@ -229,6 +229,42 @@ impl CircuitBreaker {
     pub fn state(&self) -> CircuitState {
         self.state
     }
+
+    /// Check if circuit allows execution and prepare for request
+    /// IM-3038: can_execute() for async-compatible circuit breaker usage
+    /// Returns Ok(()) if request can proceed, Err if circuit is open
+    pub fn can_execute(&mut self) -> Result<(), CircuitBreakerError> {
+        match self.state {
+            CircuitState::Open => {
+                if let Some(open_until) = self.open_until {
+                    if Instant::now() >= open_until {
+                        // Transition Open → HalfOpen after timeout
+                        self.state = CircuitState::HalfOpen;
+                        self.success_count = 0;
+                        Ok(())
+                    } else {
+                        // Still in timeout period, reject request
+                        Err(CircuitBreakerError::Open)
+                    }
+                } else {
+                    Err(CircuitBreakerError::Open)
+                }
+            }
+            CircuitState::HalfOpen | CircuitState::Closed => Ok(()),
+        }
+    }
+
+    /// Record a successful async request outcome
+    /// IM-3039: record_success() for async-compatible circuit breaker
+    pub fn record_success(&mut self) {
+        self.on_success();
+    }
+
+    /// Record a failed async request outcome
+    /// IM-3040: record_failure() for async-compatible circuit breaker
+    pub fn record_failure(&mut self) {
+        self.on_failure();
+    }
 }
 
 // ------------------------------------------------------------------
@@ -407,36 +443,37 @@ impl LLMClient {
             }
         }
 
-        // Apply circuit breaker protection
-        let result = if let Some(breaker) = self.circuit_breakers.get_mut(&provider_name) {
-            breaker.call(|| {
-                // Execute provider request synchronously for circuit breaker
-                // We'll handle async in the actual implementation
-                Ok::<String, String>(String::new()) // Placeholder
-            })
+        // Apply circuit breaker protection (async-compatible pattern)
+        // IM-3041: Check if circuit allows request before async call
+        if let Some(breaker) = self.circuit_breakers.get_mut(&provider_name) {
+            if let Err(CircuitBreakerError::Open) = breaker.can_execute() {
+                return Err(anyhow!(
+                    "{} circuit breaker is open (too many failures)",
+                    provider_name
+                ));
+            }
+        }
+
+        // Execute the actual async provider call
+        let result = if req.model.starts_with("claude") {
+            self.generate_anthropic(req).await
+        } else if req.model.starts_with("gemini") {
+            self.generate_gemini(req).await
+        } else if req.model.starts_with("deepseek") {
+            self.generate_deepseek(req).await
         } else {
-            Ok(String::new())
+            Err(anyhow!("Unsupported model: {}", req.model))
         };
 
-        match result {
-            Ok(_) => {
-                // Actual provider call
-                if req.model.starts_with("claude") {
-                    self.generate_anthropic(req).await
-                } else if req.model.starts_with("gemini") {
-                    self.generate_gemini(req).await
-                } else if req.model.starts_with("deepseek") {
-                    self.generate_deepseek(req).await
-                } else {
-                    Err(anyhow!("Unsupported model: {}", req.model))
-                }
+        // IM-3042: Record outcome in circuit breaker after async call completes
+        if let Some(breaker) = self.circuit_breakers.get_mut(&provider_name) {
+            match &result {
+                Ok(_) => breaker.record_success(),
+                Err(_) => breaker.record_failure(),
             }
-            Err(CircuitBreakerError::Open) => Err(anyhow!(
-                "{} circuit breaker is open (too many failures)",
-                provider_name
-            )),
-            Err(CircuitBreakerError::RequestFailed(e)) => Err(anyhow!("Request failed: {}", e)),
         }
+
+        result
     }
 
     /// Generate text with streaming response (tokens arrive incrementally)

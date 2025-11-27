@@ -135,7 +135,9 @@ impl Agent {
         // Since we don't have the Tavily crate installed yet, we'll rely on LLM hallucination/knowledge
         // for the 'search' phases just to make the loop work for this demo.
 
-        let model = "claude-3-5-sonnet"; // Default to Claude
+        // Use phase-specific model if configured, otherwise default to Claude
+        // IM-2010-M1: Model selection from phase config
+        let model = phase.model.as_deref().unwrap_or("claude-3-5-sonnet");
 
         let req = LLMRequest {
             system: system_prompt,
