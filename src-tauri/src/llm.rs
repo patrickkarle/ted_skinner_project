@@ -519,6 +519,19 @@ impl LLMClient {
     async fn generate_anthropic(&self, req: LLMRequest) -> Result<String> {
         let url = "https://api.anthropic.com/v1/messages";
 
+        // Debug: Log key prefix (first 10 chars only for security)
+        let key_prefix = if self.api_key.len() > 10 {
+            &self.api_key[..10]
+        } else {
+            &self.api_key
+        };
+        println!("[DEBUG] Anthropic request with key prefix: {}... (len={})", key_prefix, self.api_key.len());
+
+        // Validate key format
+        if !self.api_key.starts_with("sk-ant-") {
+            return Err(anyhow!("Invalid Anthropic API key format. Key should start with 'sk-ant-'. Got prefix: '{}'", key_prefix));
+        }
+
         let body = serde_json::json!({
             "model": req.model,
             "max_tokens": 4096,
@@ -542,7 +555,12 @@ impl LLMClient {
             .await?;
 
         if !res.status().is_success() {
-            return Err(anyhow!("Anthropic API Error: {}", res.text().await?));
+            let status = res.status();
+            let error_text = res.text().await?;
+            if status.as_u16() == 401 {
+                return Err(anyhow!("Anthropic Authentication Failed (401). Please verify your API key is valid and active. Error: {}", error_text));
+            }
+            return Err(anyhow!("Anthropic API Error ({}): {}", status, error_text));
         }
 
         let anthropic_res: AnthropicResponse = res.json().await?;

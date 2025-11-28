@@ -136,7 +136,7 @@ quality_gates: []
 
     /// Create test agent with manifest (no Window for tests)
     pub fn create_test_agent(manifest: Manifest) -> Agent {
-        Agent::new(manifest, String::new(), None)
+        Agent::new(manifest, String::new(), None, None)
     }
 
     /// Create multi-phase manifest with specified number of phases

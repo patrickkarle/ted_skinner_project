@@ -97,7 +97,7 @@ phases:
       Synthesize all previous outputs into the 'FULLINTEL OPPORTUNITY BRIEF'.
       MUST follow the exact markdown format provided in the system prompt.
       MUST include the 'Initial Outreach Email' and 'Demo Talking Points'.
-    output_format: "markdown_file"
+    output_target: "markdown_file"
 
 # ------------------------------------------------------------------
 # QUALITY GATES (The Constraints)

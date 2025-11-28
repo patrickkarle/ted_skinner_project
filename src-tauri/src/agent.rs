@@ -1,9 +1,10 @@
 use crate::llm::{LLMClient, LLMRequest};
 use crate::manifest::{Manifest, Phase};
 use anyhow::{anyhow, Result};
+use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tauri::{Emitter, Window}; // Import Tauri Emitter traits
+use tauri::{AppHandle, Emitter}; // Use AppHandle for global event emission (Tauri 2.0)
 
 // ------------------------------------------------------------------
 // Event Payloads (Sent to Frontend)
@@ -18,6 +19,12 @@ struct LogPayload {
 struct PhaseUpdatePayload {
     phase_id: String,
     status: String, // "running", "completed", "failed"
+}
+
+#[derive(Clone, Serialize)]
+struct StreamTokenPayload {
+    token: String,
+    phase_id: String,
 }
 
 // ------------------------------------------------------------------
@@ -60,17 +67,19 @@ pub struct Agent {
     manifest: Manifest,
     state: AgentState,
     llm_client: LLMClient,
-    window: Option<Window>, // Add Window handle
+    app_handle: Option<AppHandle>, // AppHandle for global event emission (Tauri 2.0)
+    model_override: Option<String>, // UI-selected model override
 }
 
 impl Agent {
-    // Modified constructor to accept optional window
-    pub fn new(manifest: Manifest, api_key: String, window: Option<Window>) -> Self {
+    // Constructor accepts AppHandle for global event emission (Tauri 2.0 pattern)
+    pub fn new(manifest: Manifest, api_key: String, app_handle: Option<AppHandle>, model_override: Option<String>) -> Self {
         Self {
             manifest,
             state: AgentState::new(),
             llm_client: LLMClient::new(api_key),
-            window,
+            app_handle,
+            model_override,
         }
     }
 
@@ -113,7 +122,12 @@ impl Agent {
     }
 
     async fn execute_phase(&mut self, phase: &Phase) -> Result<String> {
-        self.log(&format!("Executing Phase: {}", phase.name));
+        // Use UI-selected model override, then phase config, then default to Claude
+        let model = self.model_override.as_deref()
+            .or(phase.model.as_deref())
+            .unwrap_or("claude-sonnet-4-5-20250929");
+
+        self.log(&format!("📤 SENDING → {} [{}]", model, phase.name));
 
         let input_data = if let Some(input_key) = &phase.input {
             self.state
@@ -130,38 +144,94 @@ impl Agent {
             phase.name, phase.instructions
         );
 
-        // --- REAL IMPLEMENTATION SWITCH ---
-        // If we had a search tool, we'd call it here.
-        // Since we don't have the Tavily crate installed yet, we'll rely on LLM hallucination/knowledge
-        // for the 'search' phases just to make the loop work for this demo.
-
-        // Use phase-specific model if configured, otherwise default to Claude
-        // IM-2010-M1: Model selection from phase config
-        let model = phase.model.as_deref().unwrap_or("claude-3-5-sonnet");
-
         let req = LLMRequest {
-            system: system_prompt,
-            user: input_data,
+            system: system_prompt.clone(),
+            user: input_data.clone(),
             model: model.to_string(),
         };
 
-        self.llm_client.generate(req).await
+        self.log(&format!("📨 REQUEST: {} chars prompt, {} chars input", system_prompt.len(), input_data.len()));
+        self.log("⏳ CONNECTING to API...");
+
+        let start = std::time::Instant::now();
+
+        // Try streaming first, fall back to non-streaming
+        let result = match self.llm_client.generate_stream(req.clone()).await {
+            Ok(mut stream) => {
+                self.log("🔗 CONNECTED - streaming response...");
+                let mut full_response = String::new();
+                let mut token_count = 0;
+
+                while let Some(chunk_result) = stream.next().await {
+                    match chunk_result {
+                        Ok(token) => {
+                            full_response.push_str(&token);
+                            token_count += 1;
+
+                            // Emit streaming token to frontend via AppHandle (global event)
+                            if let Some(app) = &self.app_handle {
+                                let _ = app.emit("stream-token", StreamTokenPayload {
+                                    token: token.clone(),
+                                    phase_id: phase.id.clone(),
+                                });
+                            }
+
+                            // Log progress every 50 tokens
+                            if token_count % 50 == 0 {
+                                self.log(&format!("📝 ...{} tokens received...", token_count));
+                            }
+                        }
+                        Err(e) => {
+                            self.log(&format!("⚠️ Stream error: {}", e));
+                            break;
+                        }
+                    }
+                }
+
+                let elapsed = start.elapsed();
+                self.log(&format!("📥 COMPLETE: {} tokens, {} chars in {:.1}s",
+                    token_count, full_response.len(), elapsed.as_secs_f64()));
+                Ok(full_response)
+            }
+            Err(stream_err) => {
+                // Fallback to non-streaming
+                self.log(&format!("⚠️ Streaming unavailable ({}), using standard request...", stream_err));
+                self.log("⏳ WAITING for response...");
+
+                let result = self.llm_client.generate(req).await;
+                let elapsed = start.elapsed();
+
+                match &result {
+                    Ok(response) => {
+                        self.log(&format!("📥 RECEIVED: {} chars in {:.1}s", response.len(), elapsed.as_secs_f64()));
+                    }
+                    Err(e) => {
+                        self.log(&format!("❌ ERROR after {:.1}s: {}", elapsed.as_secs_f64(), e));
+                    }
+                }
+                result
+            }
+        };
+
+        result
     }
 
-    // Helper to log to stdout AND emit to frontend
+    // Helper to log to stdout AND emit to frontend via AppHandle (global event)
     fn log(&self, msg: &str) {
         println!("[AGENT] {}", msg);
-        if let Some(window) = &self.window {
-            let _ = window.emit(
-                "agent-log",
-                LogPayload {
-                    message: msg.to_string(),
-                },
-            );
+        if let Some(app) = &self.app_handle {
+            match app.emit("agent-log", LogPayload {
+                message: msg.to_string(),
+            }) {
+                Ok(_) => println!("[AGENT-EMIT] ✓ Sent: {}", &msg[..msg.len().min(50)]),
+                Err(e) => eprintln!("[AGENT-EMIT-ERROR] Failed to emit log: {}", e),
+            }
+        } else {
+            eprintln!("[AGENT-EMIT-ERROR] No AppHandle available!");
         }
     }
 
-    // Helper to update status AND emit to frontend
+    // Helper to update status AND emit to frontend via AppHandle (global event)
     fn update_phase_status(&mut self, phase_id: &str, status: PhaseStatus) {
         self.state
             .phase_statuses
@@ -174,14 +244,14 @@ impl Agent {
             _ => "pending",
         };
 
-        if let Some(window) = &self.window {
-            let _ = window.emit(
-                "phase-update",
-                PhaseUpdatePayload {
-                    phase_id: phase_id.to_string(),
-                    status: status_str.to_string(),
-                },
-            );
+        if let Some(app) = &self.app_handle {
+            match app.emit("phase-update", PhaseUpdatePayload {
+                phase_id: phase_id.to_string(),
+                status: status_str.to_string(),
+            }) {
+                Ok(_) => println!("[AGENT-EMIT] ✓ Phase {} -> {}", phase_id, status_str),
+                Err(e) => eprintln!("[AGENT-EMIT-ERROR] Failed to emit phase-update: {}", e),
+            }
         }
     }
 }
@@ -215,28 +285,28 @@ quality_gates: []
     #[test]
     fn test_agent_new_initializes_correctly() {
         let manifest = create_test_manifest();
-        let _agent = Agent::new(manifest, "test-key".to_string(), None);
+        let _agent = Agent::new(manifest, "test-key".to_string(), None, None);
         // Compile-time verification - Agent constructor succeeds
     }
 
     #[test]
     fn test_agent_get_context_missing_key() {
         let manifest = create_test_manifest();
-        let agent = Agent::new(manifest, "test-key".to_string(), None);
+        let agent = Agent::new(manifest, "test-key".to_string(), None, None);
         assert!(agent.get_context("nonexistent").is_none());
     }
 
     #[tokio::test]
     async fn test_run_workflow_empty_manifest() {
         let manifest = create_test_manifest();
-        let mut agent = Agent::new(manifest, "test-key".to_string(), None);
+        let mut agent = Agent::new(manifest, "test-key".to_string(), None, None);
         assert!(agent.run_workflow("test").await.is_ok());
     }
 
     #[tokio::test]
     async fn test_run_workflow_sets_context() {
         let manifest = create_test_manifest();
-        let mut agent = Agent::new(manifest, "test-key".to_string(), None);
+        let mut agent = Agent::new(manifest, "test-key".to_string(), None, None);
         let _ = agent.run_workflow("Acme Corp").await;
         let target = agent.get_context("target_company");
         assert!(target.is_some());
@@ -246,7 +316,7 @@ quality_gates: []
     #[test]
     fn test_agent_state_initializes_empty() {
         let manifest = create_test_manifest();
-        let agent = Agent::new(manifest, "test-key".to_string(), None);
+        let agent = Agent::new(manifest, "test-key".to_string(), None, None);
         assert!(agent.get_context("any_key").is_none());
     }
 }

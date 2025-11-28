@@ -11,6 +11,8 @@ tauri-build = { version = "2.0", features = [] }
 [dependencies]
 tauri = { version = "2.0", features = [] }
 tauri-plugin-shell = "2.0"
+tauri-plugin-dialog = "2.0"
+tauri-plugin-fs = "2.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_yaml = "0.9"
@@ -21,6 +23,13 @@ futures = "0.3"
 async-stream = "0.3"
 async-trait = "0.1"
 thiserror = "1.0"
+
+# Authentication & Security
+argon2 = "0.5"              # Password hashing (Argon2id)
+aes-gcm = "0.10"            # AES-256-GCM encryption for API keys
+rusqlite = { version = "0.31", features = ["bundled"] }  # SQLite database
+rand = "0.8"                # Cryptographic random number generation
+base64 = "0.22"             # Encoding encrypted data
 
 [dev-dependencies]
 tempfile = "3.8"

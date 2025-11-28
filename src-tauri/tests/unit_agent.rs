@@ -79,7 +79,7 @@ fn test_agent_new_initializes_correctly() {
     let manifest = create_test_manifest();
     let api_key = "test-key-12345".to_string();
 
-    let agent = Agent::new(manifest, api_key, None);
+    let agent = Agent::new(manifest, api_key, None, None);
 
     // Verify agent created successfully (implicitly - would panic if failed)
     assert!(
@@ -96,7 +96,7 @@ fn test_agent_new_with_empty_manifest() {
     let manifest = create_test_manifest(); // Empty manifest (no phases)
     let api_key = "test-key-12345".to_string();
 
-    let _agent = Agent::new(manifest, api_key, None);
+    let _agent = Agent::new(manifest, api_key, None, None);
 
     // Agent should construct successfully even with empty manifest
     // Compile-time verification - Agent constructor succeeds
@@ -110,7 +110,7 @@ fn test_agent_new_with_valid_api_key() {
     let manifest = create_test_manifest();
     let api_key = "sk-ant-test-key".to_string();
 
-    let _agent = Agent::new(manifest, api_key, None);
+    let _agent = Agent::new(manifest, api_key, None, None);
 
     // Agent creation should succeed
     // Compile-time verification - constructor succeeds with API key
@@ -127,7 +127,7 @@ fn test_get_context_returns_none_for_missing_key() {
 
     let manifest = create_test_manifest();
     let api_key = "test-key".to_string();
-    let agent = Agent::new(manifest, api_key, None);
+    let agent = Agent::new(manifest, api_key, None, None);
 
     let result = agent.get_context("nonexistent_key");
 
@@ -149,7 +149,7 @@ fn test_agent_stores_manifest() {
     let manifest = create_manifest_with_phase();
     let api_key = "test-key".to_string();
 
-    let _agent = Agent::new(manifest, api_key, None);
+    let _agent = Agent::new(manifest, api_key, None, None);
 
     // Agent should construct successfully with manifest containing phases
     // Compile-time verification - constructor succeeds with phases
@@ -167,7 +167,7 @@ fn test_agent_without_window() {
     let manifest = create_test_manifest();
     let api_key = "test-key".to_string();
 
-    let _agent = Agent::new(manifest, api_key, None);
+    let _agent = Agent::new(manifest, api_key, None, None);
 
     // Agent should work fine without window (for testing/CLI usage)
     // Compile-time verification - constructor succeeds without window
@@ -184,7 +184,7 @@ async fn test_run_workflow_with_empty_manifest() {
 
     let manifest = create_test_manifest(); // No phases
     let api_key = "test-key".to_string();
-    let mut agent = Agent::new(manifest, api_key, None);
+    let mut agent = Agent::new(manifest, api_key, None, None);
 
     let result = agent.run_workflow("test input").await;
 
@@ -201,7 +201,7 @@ async fn test_run_workflow_sets_initial_context() {
 
     let manifest = create_test_manifest();
     let api_key = "test-key".to_string();
-    let mut agent = Agent::new(manifest, api_key, None);
+    let mut agent = Agent::new(manifest, api_key, None, None);
 
     let _ = agent.run_workflow("Acme Corp").await;
 
@@ -222,7 +222,7 @@ fn test_agent_initializes_with_empty_state() {
 
     let manifest = create_test_manifest();
     let api_key = "test-key".to_string();
-    let agent = Agent::new(manifest, api_key, None);
+    let agent = Agent::new(manifest, api_key, None, None);
 
     // State should be initialized but empty
     // (We can't directly access state field, so we test via get_context)
@@ -242,7 +242,7 @@ fn test_agent_creates_llm_client() {
     let manifest = create_test_manifest();
     let api_key = "sk-ant-test-key-12345".to_string();
 
-    let _agent = Agent::new(manifest, api_key, None);
+    let _agent = Agent::new(manifest, api_key, None, None);
 
     // Agent should successfully create with LLMClient
     // (LLMClient initialization happens in constructor)
