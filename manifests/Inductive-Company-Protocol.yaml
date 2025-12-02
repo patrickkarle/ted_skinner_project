@@ -1,0 +1,145 @@
+manifest:
+  id: "Inductive-Company-Protocol"
+  version: "1.1.0"
+  name: "Inductive Entity-to-Landscape Analysis"
+  description: "A 6-phase bottom-up workflow. Starts with a specific target entity and inductively maps its specific niche, competitors, and the broader industry trajectory (Past, Present, Future)."
+
+# ------------------------------------------------------------------
+# DATA SCHEMAS (Entity-First Architecture with Recency)
+# ------------------------------------------------------------------
+schemas:
+  EntityDNA:
+    fields:
+      - name: target_name
+      - name: founding_year
+      - name: core_product_or_tech
+      - name: derived_segment_definition
+        description: "The specific niche defined by this company's operations (e.g., not just 'Auto', but 'LIDAR-based Autonomy')."
+      - name: data_currency_timestamp
+        description: "The date against which this profile was verified (Must be today)."
+
+  CompetitiveCluster:
+    fields:
+      - name: cluster_name
+      - name: primary_rivals
+        type: list
+      - name: asymmetry_type
+        enum: [FEATURE_WAR, PRICE_WAR, REGULATORY_RACE, IP_BATTLE]
+      - name: market_position
+        enum: [LEADER, CHALLENGER, LAGGARD, PIVOTING]
+
+  HorizonForecast:
+    fields:
+      - name: time_horizon
+        enum: [SHORT_TERM_6M, MEDIUM_TERM_2Y, LONG_TERM_5Y]
+      - name: dominant_force
+        enum: [TECHNOLOGY, REGULATION, CONSUMER_DEMAND, SUPPLY_CHAIN]
+      - name: prediction_summary
+      - name: probability_score
+        enum: [HIGH, MODERATE, LOW]
+
+  HistoricalContext:
+    fields:
+      - name: pivotal_event
+      - name: event_date
+      - name: impact_on_current_reality
+        description: "How this past event shaped the current landscape."
+
+# ------------------------------------------------------------------
+# EXECUTION PHASES (Bottom-Up Inductive Flow)
+# ------------------------------------------------------------------
+phases:
+  - id: "PHASE-01-DNA"
+    name: "Entity Extraction & Definition"
+    tools: ["search_tool"]
+    input: "target_company"
+    instructions: |
+      Deeply analyze the 'target_company'.
+      CRITICAL: All searches must append the current year/month context to filter for the absolute most current data available as of [TODAY'S DATE].
+      1. Identify their core "Moat" or unique value proposition.
+      2. Define their segment based strictly on what they *do*, not what they *say*. (e.g., If they sell ads but call it 'community', they are AdTech).
+      3. Map their key historical milestones.
+      4. Set the 'derived_segment_definition' which will guide the rest of the probe.
+    output_schema: "EntityDNA"
+
+  - id: "PHASE-02-CLUSTER"
+    name: "Competitive Cluster Mapping"
+    dependencies: ["PHASE-01-DNA"]
+    tools: ["search_tool", "crunchbase_search"]
+    instructions: |
+      Using the 'derived_segment_definition' from Phase 01, look outwards.
+      1. Who loses money when 'target_company' makes money? (Direct Rivals).
+      2. Who solves the same problem but with a different mechanism? (Indirect Rivals).
+      3. Classify the nature of the competition (Price, Tech, or Regulation).
+    output_schema: "CompetitiveCluster"
+
+  - id: "PHASE-03-HISTORY"
+    name: "Retro-Causal Analysis"
+    dependencies: ["PHASE-01-DNA", "PHASE-02-CLUSTER"]
+    instructions: |
+      Look backward to explain the present.
+      1. Search for shared historical stressors that affected this specific cluster (e.g., '2023 Chip Shortage', '2020 FDA Ruling').
+      2. How did the 'target_company' survive vs. peers?
+      3. Construct a timeline of the 'derived_segment' based on this company's journey.
+    output_schema: "HistoricalContext"
+
+  - id: "PHASE-04-HORIZON"
+    name: "Inductive Future Projection"
+    dependencies: ["PHASE-01-DNA", "PHASE-02-CLUSTER"]
+    # LOGIC MAP: Inductive reasoning based on company behavior
+    logic_map:
+      IF_HEAVY_RND:
+        horizon: "LONG_TERM_5Y"
+        driver: "TECHNOLOGY"
+      IF_LITIGATION_HEAVY:
+        horizon: "MEDIUM_TERM_2Y"
+        driver: "REGULATION"
+      IF_PRICE_CUTTING:
+        horizon: "SHORT_TERM_6M"
+        driver: "CONSUMER_DEMAND"
+    instructions: |
+      Look forward based on current behavior.
+      1. Analyze the company's recent hiring and patent filing (signals of intent).
+      2. Apply the Logic Map: If they are hiring lawyers, the future is Regulatory. If engineers, it's Tech.
+      3. Generate forecasts for Short (6mo), Medium (2yr), and Long (5yr) terms.
+    output_schema: "HorizonForecast"
+
+  - id: "PHASE-05-VERIFICATION"
+    name: "Reality Grounding"
+    dependencies: ["PHASE-04-HORIZON"]
+    tools: ["search_tool", "fact_checker"]
+    instructions: |
+      Verify the inductive leaps AS OF [TODAY'S DATE].
+      1. Are the 'competitors' actually active in the same markets right now?
+      2. Does the 'historical context' align with verified news sources?
+      3. Check data currency: Ensure stock prices/news are from [CURRENT_YEAR].
+    output_target: "FidelityLog"
+
+  - id: "PHASE-06-SYNTHESIS"
+    name: "Inductive Landscape Report"
+    dependencies: ["ALL"]
+    instructions: |
+      Synthesize the story from the specific to the general.
+      Structure:
+      1. **The Seed:** Profile of [target_company] (Current Status).
+      2. **The Soil (Segment):** Definition of the niche they inhabit.
+      3. **The Neighbors:** Competitive landscape analysis.
+      4. **The Roots (History):** How the industry got here.
+      5. **The Growth (Forecast):** Short/Med/Long term prospects.
+    output_target: "markdown_file"
+
+# ------------------------------------------------------------------
+# QUALITY GATES
+# ------------------------------------------------------------------
+quality_gates:
+  - phase: "PHASE-01-DNA"
+    check: "Does the output explicitly reference current market conditions from [CURRENT_YEAR]?"
+    fail_action: "RETRY_WITH_CURRENT_DATE_FILTER"
+
+  - phase: "PHASE-01-DNA"
+    check: "Is the segment definition specific enough? (Bad: 'Tech'. Good: 'Enterprise API Security')."
+    fail_action: "NARROW_SEGMENT_SCOPE"
+
+  - phase: "PHASE-04-HORIZON"
+    check: "Are the forecasts based on evidence (hiring, patents) rather than generic guessing?"
+    fail_action: "RETRY_WITH_EVIDENCE"

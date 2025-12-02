@@ -1,0 +1,462 @@
+/* ManifestEditor.css - Fullintel Agent Design System v3.0.0 */
+/* Uses CSS variables from App.css :root */
+
+.manifest-editor-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(10, 22, 40, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  padding: var(--space-4);
+}
+
+.manifest-editor-panel {
+  background: var(--bg-card);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 20px 60px rgba(10, 22, 40, 0.25);
+  width: 100%;
+  max-width: 900px;
+  height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Header */
+.manifest-editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--border-default);
+  flex-shrink: 0;
+}
+
+.manifest-editor-header h2 {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+}
+
+.modified-indicator {
+  color: var(--status-invalid);
+  margin-left: var(--space-1);
+}
+
+.manifest-editor-header .close-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: var(--blue-50);
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-xl);
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: var(--transition-normal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.manifest-editor-header .close-btn:hover {
+  background: var(--blue-100);
+  color: var(--text-secondary);
+}
+
+/* Toolbar */
+.manifest-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--blue-50);
+  flex-shrink: 0;
+}
+
+/* Button group container */
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  height: 32px;
+}
+
+.toolbar-btn:hover:not(:disabled) {
+  background: var(--blue-100);
+  border-color: var(--blue-300);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(58, 90, 138, 0.12);
+}
+
+.toolbar-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+.toolbar-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Icon styling within buttons */
+.toolbar-btn .btn-icon {
+  font-size: 13px;
+  opacity: 0.7;
+  transition: opacity 0.15s ease;
+}
+
+.toolbar-btn:hover:not(:disabled) .btn-icon {
+  opacity: 1;
+}
+
+.toolbar-separator {
+  width: 1px;
+  height: 20px;
+  background: var(--border-default);
+  margin: 0 var(--space-3);
+  opacity: 0.6;
+}
+
+/* Secondary action button (Validate) */
+.toolbar-btn.validate-btn {
+  background: var(--bg-card);
+  border-color: var(--blue-300);
+  color: var(--blue-600);
+}
+
+.toolbar-btn.validate-btn:hover:not(:disabled) {
+  background: var(--blue-100);
+  border-color: var(--blue-400);
+  color: var(--blue-700);
+}
+
+/* Primary action button (Use Manifest) */
+.toolbar-btn.use-btn {
+  background: linear-gradient(135deg, var(--blue-600) 0%, var(--blue-700) 100%);
+  border: none;
+  color: white;
+  font-weight: var(--font-weight-medium);
+  padding: 7px 18px;
+}
+
+.toolbar-btn.use-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(58, 90, 138, 0.25);
+}
+
+.toolbar-btn.use-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(58, 90, 138, 0.2);
+}
+
+.toolbar-btn.use-btn:disabled {
+  background: var(--blue-200);
+  color: var(--text-muted);
+}
+
+/* File info bar */
+.manifest-editor-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  background: var(--blue-50);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--font-size-sm);
+  flex-shrink: 0;
+}
+
+/* Display name editing */
+.display-name-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.display-name-label {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  font-weight: var(--font-weight-normal);
+}
+
+.display-name-value {
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  transition: var(--transition-normal);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.display-name-value:hover {
+  background: var(--blue-100);
+}
+
+.display-name-value .edit-hint {
+  font-size: 9px;
+  color: var(--text-faint);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.display-name-value:hover .edit-hint {
+  opacity: 1;
+}
+
+.display-name-input {
+  padding: 4px 8px;
+  border: 1px solid var(--blue-300);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  background: var(--bg-card);
+  min-width: 200px;
+  outline: none;
+  flex: 1;
+  max-width: 300px;
+}
+
+.display-name-input:focus {
+  border-color: var(--blue-500);
+  box-shadow: 0 0 0 2px rgba(77, 111, 163, 0.2);
+}
+
+.display-name-input::placeholder {
+  color: var(--text-faint);
+  font-weight: var(--font-weight-normal);
+}
+
+/* Rename button - next to name input */
+.rename-btn {
+  padding: 4px 10px;
+  background: var(--blue-100);
+  border: 1px solid var(--blue-300);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--blue-600);
+  cursor: pointer;
+  transition: var(--transition-normal);
+  white-space: nowrap;
+}
+
+.rename-btn:hover {
+  background: var(--blue-200);
+  border-color: var(--blue-400);
+  color: var(--blue-700);
+}
+
+/* Remove button - subtle muted style matching design system */
+.toolbar-btn.remove-btn {
+  background: var(--blue-50);
+  border: 1px solid var(--border-default);
+  color: var(--text-muted);
+}
+
+.toolbar-btn.remove-btn:hover:not(:disabled) {
+  background: var(--blue-100);
+  border-color: var(--blue-300);
+  color: var(--text-secondary);
+}
+
+.file-name {
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+}
+
+.file-path {
+  color: var(--text-faint);
+  font-size: var(--font-size-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 400px;
+}
+
+/* Main content area */
+.manifest-editor-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Editor pane */
+.editor-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  border-right: 1px solid var(--border-default);
+}
+
+.yaml-editor {
+  flex: 1;
+  width: 100%;
+  padding: var(--space-4);
+  border: none;
+  resize: none;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  background: var(--input-bg);
+  color: var(--text-primary);
+}
+
+.yaml-editor:focus {
+  outline: none;
+}
+
+.yaml-editor::placeholder {
+  color: var(--text-faint);
+}
+
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--text-muted);
+  font-size: var(--font-size-md);
+}
+
+/* Validation pane */
+.validation-pane {
+  width: 240px;
+  padding: var(--space-4);
+  background: var(--blue-50);
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.validation-status {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  text-align: center;
+  margin-bottom: var(--space-3);
+}
+
+.validation-status.status-valid {
+  background: rgba(68, 170, 153, 0.15);
+  color: var(--status-valid);
+}
+
+.validation-status.status-invalid {
+  background: rgba(204, 102, 102, 0.15);
+  color: var(--status-invalid);
+}
+
+.validation-status.status-unchecked {
+  background: var(--blue-100);
+  color: var(--text-muted);
+}
+
+.validation-message {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-4);
+  word-break: break-word;
+}
+
+/* Phases preview */
+.phases-preview {
+  border-top: 1px solid var(--border-default);
+  padding-top: var(--space-3);
+}
+
+.phases-preview h4 {
+  margin: 0 0 var(--space-2) 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+}
+
+.phases-preview ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.phases-preview li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+  font-size: var(--font-size-xs);
+}
+
+.phase-number {
+  color: var(--text-faint);
+  min-width: 18px;
+}
+
+.phase-name {
+  color: var(--text-primary);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .manifest-editor-panel {
+    max-width: 100%;
+    height: 100vh;
+    border-radius: 0;
+  }
+
+  .manifest-editor-content {
+    flex-direction: column;
+  }
+
+  .editor-pane {
+    border-right: none;
+    border-bottom: 1px solid var(--border-default);
+  }
+
+  .validation-pane {
+    width: 100%;
+    max-height: 200px;
+  }
+
+  .toolbar-btn {
+    padding: var(--space-1) var(--space-2);
+    font-size: var(--font-size-xs);
+  }
+}

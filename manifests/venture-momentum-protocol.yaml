@@ -1,0 +1,68 @@
+manifest:
+  id: "Venture-Momentum-Protocol"
+  version: "1.0.0"
+  name: "Significant Investment & Deal Flow Analysis"
+  description: "A workflow to track capital flows, analyzing not just 'who got funded' but 'who funded them and why'."
+
+schemas:
+  DealAnatomy:
+    fields:
+      - name: startup_name
+      - name: round_size
+      - name: lead_investor_type
+        enum: [TIER_1_VC, CVC_STRATEGIC, SOVEREIGN_WEALTH, CROWD]
+      - name: valuation_velocity
+        description: "Growth in valuation between rounds."
+      - name: data_currency_timestamp
+        description: "Verified as of [TODAY'S DATE]."
+
+  SignalStrength:
+    fields:
+      - name: investor_quality
+        enum: [SMART_MONEY, FOMO_CAPITAL, TOURIST_CAPITAL]
+      - name: strategic_implication
+        description: "What does this bet signal about the future?"
+
+phases:
+  - id: "PHASE-01-MONEY-TRAIL"
+    name: "Funding Spike Detection"
+    tools: ["search_tool", "crunchbase_search"]
+    input: "sector_or_region"
+    instructions: |
+      Identify startups in 'sector_or_region' that raised >$20M in the last 6 months (relative to [TODAY'S DATE]).
+      1. Filter for outliers (rounds significantly larger than the median).
+      2. Identify the Lead Investor.
+    output_schema: "DealAnatomy"
+
+  - id: "PHASE-02-SIGNAL"
+    name: "Investor Intent Analysis"
+    dependencies: ["PHASE-01-MONEY-TRAIL"]
+    logic_map:
+      CVC_LEAD:
+        implication: "POTENTIAL_ACQUISITION_TARGET"
+        signal: "STRATEGIC_VALIDATION"
+      TIER_1_VC_LEAD:
+        implication: "IPO_TRACK"
+        signal: "MARKET_CREATION"
+      UNKNOWN_LEAD:
+        implication: "RISKY_BET"
+        signal: "WEAK_SIGNAL"
+    instructions: |
+      Analyze the 'Lead Investor' using the Logic Map.
+      Is this 'Smart Money' (Deep expertise) or 'Tourist Money' (Generalist jumping on hype)?
+    output_schema: "SignalStrength"
+
+  - id: "PHASE-03-SYNTHESIS"
+    name: "Capital Flow Report"
+    dependencies: ["ALL"]
+    instructions: |
+      Synthesize:
+      1. **The Whales:** Who raised the most?
+      2. **The Signal:** What does the *source* of capital tell us?
+      3. **The Prediction:** Which startups are effectively 'anointed' winners?
+    output_target: "markdown_file"
+
+quality_gates:
+  - phase: "PHASE-01-MONEY-TRAIL"
+    check: "Are the funding rounds confirmed by SEC filings or press releases? (No rumors)."
+    fail_action: "EXCLUDE_UNCONFIRMED"

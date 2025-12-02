@@ -1,0 +1,162 @@
+manifest:
+  id: "Deep-Dive-Industry-Protocol"
+  version: "2.1.0"
+  name: "Strategic Industry Segmentation & Emergence Analysis"
+  description: "A 6-phase workflow to map an industry landscape, segment critical domains, isolate emergent players and technologies, and rigorously verify findings for high-fidelity reporting."
+
+# ------------------------------------------------------------------
+# DATA SCHEMAS (Strict Definitions & Enums)
+# ------------------------------------------------------------------
+schemas:
+  LandscapeSchema:
+    fields:
+      - name: industry_definition
+      - name: market_maturity
+        enum: [EMERGING, GROWTH, MATURE, DECLINING]
+      - name: regulatory_risk
+        enum: [HIGH, MEDIUM, LOW]
+      - name: major_incumbents
+        type: list
+
+  SegmentationSchema:
+    fields:
+      - name: critical_operational_areas
+      - name: friction_level
+        enum: [HIGH, MODERATE, LOW]
+      - name: innovation_opportunity_score
+        enum: [1, 2, 3, 4, 5]
+      - name: selected_sub_domains
+        type: list
+
+  EmergentPlayerSchema:
+    fields:
+      - name: entity_name
+      - name: entity_type
+        enum: [STARTUP, SPINOFF, ACADEMIC_LAB, STEALTH_MODE]
+      - name: funding_status
+        type: string
+      - name: threat_level
+        enum: [DISRUPTIVE, SUSTAINING, NICHE]
+      - name: target_incumbent
+        description: "The legacy player this entity is challenging"
+
+  TechVectorSchema:
+    fields:
+      - name: technology_name
+      - name: readiness_level
+        enum: [THEORETICAL, LAB_PROTOTYPE, COMMERCIAL_PILOT, SCALE_READY]
+      - name: primary_impact
+        enum: [COST_REDUCTION, SPEED, QUALITY, NEW_CAPABILITY]
+      - name: scientific_principle
+        description: "The core mechanism of action"
+
+  FidelityLog:
+    fields:
+      - name: verified_entity
+      - name: source_citation
+      - name: status
+        enum: [VERIFIED, SUSPICIOUS, DEBUNKED]
+
+# ------------------------------------------------------------------
+# EXECUTION PHASES (Logic-Driven Workflow)
+# ------------------------------------------------------------------
+phases:
+  - id: "PHASE-01-LANDSCAPE"
+    name: "Macro Landscape Survey"
+    tools: ["search_tool"]
+    input: "industry_segment"
+    instructions: |
+      Conduct a broad sweep of the input industry (e.g., 'Pharmaceuticals').
+      1. Classify the 'market_maturity' based on recent growth rates.
+      2. Identify the top 5-10 Major Incumbents.
+      3. Map the current regulatory and economic climate.
+      4. Establish the 'status quo' baseline to contrast against later phases.
+    output_schema: "LandscapeSchema"
+
+  - id: "PHASE-02-SEGMENTATION"
+    name: "Structural Breakdown"
+    dependencies: ["PHASE-01-LANDSCAPE"]
+    instructions: |
+      Deconstruct the industry into functional sub-domains.
+      Do not look for news yet; look for structure.
+      1. Break the industry into 'Critical Areas of Interest' (e.g., Clinical Trials, Cold Chain, Manufacturing).
+      2. Rate 'friction_level' for each domain based on inefficiency reports.
+      3. Select top 3 high-friction domains for Deep Dive in subsequent phases.
+    output_schema: "SegmentationSchema"
+
+  - id: "PHASE-03-PLAYERS"
+    name: "Emergent Entity Identification"
+    dependencies: ["PHASE-02-SEGMENTATION"]
+    tools: ["search_tool", "crunchbase_search"]
+    instructions: |
+      Focus strictly on COMPANIES and ENTITIES within the 3 sub-domains identified in Phase 02.
+      1. Find startups, spin-offs, or new entrants founded in the last 5-7 years.
+      2. MUST classify 'entity_type' strictly (e.g., is it a Startup or a Spinoff?).
+      3. Map these players against the incumbents they are challenging.
+    output_schema: "EmergentPlayerSchema"
+
+  - id: "PHASE-04-VECTORS"
+    name: "Technological Deep Dive"
+    dependencies: ["PHASE-03-PLAYERS"]
+    # LOGIC MAP: Deterministic categorization of the tech impact
+    logic_map:
+      COST_REDUCTION:
+        focus: "Unit Economics Analysis"
+        metric: "Savings %"
+      SPEED:
+        focus: "Process Velocity"
+        metric: "Time-to-Market"
+      NEW_CAPABILITY:
+        focus: "IP & Moat Analysis"
+        metric: "Patent Strength"
+      QUALITY:
+        focus: "Error Rate Reduction"
+        metric: "Defect Percentage"
+    instructions: |
+      Analyze the core technology of the players identified in Phase 03.
+      1. Determine the 'primary_impact' to select the correct analysis focus from the logic_map.
+      2. Assess 'readiness_level' (TRL) - differentiate between a whitepaper and a product.
+      3. Explain the scientific principle without marketing jargon.
+    output_schema: "TechVectorSchema"
+
+  - id: "PHASE-05-VERIFICATION"
+    name: "Fidelity Check"
+    dependencies: ["PHASE-03-PLAYERS", "PHASE-04-VECTORS"]
+    tools: ["search_tool", "fact_checker"]
+    instructions: |
+      CRITICAL STEP: VERIFY REALITY.
+      1. Verify existence of all entities (website, registration, funding).
+      2. Verify validity of tech claims (academic papers, patents, pilots).
+      - IF 'readiness_level' is SCALE_READY but no customers found -> Flag as SUSPICIOUS.
+      - IF 'funding_status' is unknown -> Mark as UNVERIFIED.
+      3. Create a log of what is true and what is hype.
+    output_target: "FidelityLog"
+
+  - id: "PHASE-06-SYNTHESIS"
+    name: "Strategic Manifesto Generation"
+    dependencies: ["ALL"]
+    instructions: |
+      Synthesize all verified data into the final Strategic Report.
+      Structure:
+      1. **The Landscape:** Macro overview and maturity.
+      2. **The Breakdown:** Segmentation of critical areas.
+      3. **The Disrupters:** Profiles of verified emergent players.
+      4. **The Vectors:** Deep explanation of technologies using the Logic Map metrics.
+      5. **Integrity Report:** Confidence score based on Phase 05.
+    output_target: "markdown_file"
+
+# ------------------------------------------------------------------
+# QUALITY GATES (Guardrails for Truth)
+# ------------------------------------------------------------------
+quality_gates:
+  - phase: "PHASE-02-SEGMENTATION"
+    check: "Are friction levels explicitly justified with data?"
+    fail_action: "RETRY_WITH_DATA"
+
+  - phase: "PHASE-04-VECTORS"
+    check: "Is the technology described via scientific principle rather than marketing slogans?"
+    fail_action: "REGENERATE_TECHNICAL_DESCRIPTION"
+
+  - phase: "PHASE-05-VERIFICATION"
+    check: "Is the hallucination rate < 0% (i.e., zero unverified claims passed to final report)?"
+    fail_action: "PURGE_UNVERIFIED_DATA"

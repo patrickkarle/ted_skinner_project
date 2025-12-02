@@ -52,6 +52,185 @@ pub enum CircuitBreakerError {
 }
 
 // ------------------------------------------------------------------
+// Multi-Turn Error Types (IM-4006)
+// ------------------------------------------------------------------
+
+#[derive(Debug, Error)]
+pub enum MultiTurnError {
+    #[error("Empty message history - at least one message required")]
+    EmptyHistory,
+
+    #[error("Invalid message ordering: {0}")]
+    InvalidOrdering(String),
+
+    #[error("Context length exceeded: {0} tokens")]
+    ContextLengthExceeded(usize),
+
+    #[error("Role transformation error: {0}")]
+    RoleTransformError(String),
+}
+
+// ------------------------------------------------------------------
+// Multi-Turn Conversation Types (IM-4001-4005)
+// ------------------------------------------------------------------
+
+/// IM-4002: ChatRole - Provider-independent role enum
+/// Maps to provider-specific role strings via to_provider_string()
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ChatRole {
+    System,     // System instructions (some providers)
+    User,       // User messages
+    Assistant,  // AI responses (maps to "model" for Gemini)
+}
+
+impl ChatRole {
+    /// IM-4002-M1: Convert to provider-specific role string
+    /// CRITICAL: Gemini uses "model" instead of "assistant"
+    pub fn to_provider_string(&self, provider: &str) -> &'static str {
+        match (self, provider) {
+            (ChatRole::System, _) => "system",
+            (ChatRole::User, _) => "user",
+            (ChatRole::Assistant, "gemini") | (ChatRole::Assistant, "google") => "model", // CRITICAL: Gemini uses "model"
+            (ChatRole::Assistant, _) => "assistant",
+        }
+    }
+}
+
+/// IM-4001: ChatMessage - Individual conversation message
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatMessage {
+    pub role: ChatRole,   // IM-4001-F1: Semantic role (abstracted)
+    pub content: String,  // IM-4001-F2: Message content
+}
+
+impl ChatMessage {
+    /// Create a new chat message
+    pub fn new(role: ChatRole, content: impl Into<String>) -> Self {
+        Self {
+            role,
+            content: content.into(),
+        }
+    }
+
+    /// Create a user message
+    pub fn user(content: impl Into<String>) -> Self {
+        Self::new(ChatRole::User, content)
+    }
+
+    /// Create an assistant message
+    pub fn assistant(content: impl Into<String>) -> Self {
+        Self::new(ChatRole::Assistant, content)
+    }
+
+    /// Create a system message
+    pub fn system(content: impl Into<String>) -> Self {
+        Self::new(ChatRole::System, content)
+    }
+}
+
+/// IM-4005: CacheTTL - Cache duration options (Anthropic-specific)
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub enum CacheTTL {
+    FiveMinutes,  // Default, lower write cost
+    OneHour,      // Extended, higher write cost (2x)
+}
+
+impl CacheTTL {
+    /// Get the Anthropic beta header value for this TTL
+    pub fn to_anthropic_header(&self) -> &'static str {
+        match self {
+            CacheTTL::FiveMinutes => "prompt-caching-2024-07-31",
+            CacheTTL::OneHour => "extended-cache-ttl-2025-04-11",
+        }
+    }
+}
+
+/// IM-4004: CacheConfig - Caching configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CacheConfig {
+    pub ttl: CacheTTL,  // IM-4004-F1: Time to live
+}
+
+impl Default for CacheConfig {
+    fn default() -> Self {
+        Self {
+            ttl: CacheTTL::FiveMinutes,
+        }
+    }
+}
+
+/// IM-4003: MultiTurnRequest - Full conversation request
+#[derive(Debug, Clone, Serialize)]
+pub struct MultiTurnRequest {
+    pub system: Option<String>,       // IM-4003-F1: Optional system prompt
+    pub messages: Vec<ChatMessage>,   // IM-4003-F2: Conversation history
+    pub model: String,                // IM-4003-F3: Model identifier
+    pub enable_caching: bool,         // IM-4003-F4: Enable provider caching
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_config: Option<CacheConfig>, // IM-4003-F5: Cache configuration
+}
+
+impl MultiTurnRequest {
+    /// Create a new multi-turn request
+    pub fn new(model: impl Into<String>) -> Self {
+        Self {
+            system: None,
+            messages: Vec::new(),
+            model: model.into(),
+            enable_caching: false,
+            cache_config: None,
+        }
+    }
+
+    /// Builder: Add system prompt
+    pub fn with_system(mut self, system: impl Into<String>) -> Self {
+        self.system = Some(system.into());
+        self
+    }
+
+    /// Builder: Add a message to history
+    pub fn with_message(mut self, message: ChatMessage) -> Self {
+        self.messages.push(message);
+        self
+    }
+
+    /// Builder: Add multiple messages to history
+    pub fn with_messages(mut self, messages: Vec<ChatMessage>) -> Self {
+        self.messages.extend(messages);
+        self
+    }
+
+    /// Builder: Enable caching with default config
+    pub fn with_caching(mut self) -> Self {
+        self.enable_caching = true;
+        self.cache_config = Some(CacheConfig::default());
+        self
+    }
+
+    /// Builder: Enable caching with custom config
+    pub fn with_cache_config(mut self, config: CacheConfig) -> Self {
+        self.enable_caching = true;
+        self.cache_config = Some(config);
+        self
+    }
+
+    /// Builder: Disable caching
+    pub fn without_caching(mut self) -> Self {
+        self.enable_caching = false;
+        self.cache_config = None;
+        self
+    }
+
+    /// Validate the request before sending
+    pub fn validate(&self) -> Result<(), MultiTurnError> {
+        if self.messages.is_empty() && self.system.is_none() {
+            return Err(MultiTurnError::EmptyHistory);
+        }
+        Ok(())
+    }
+}
+
+// ------------------------------------------------------------------
 // Rate Limiter (IM-3020-3024)
 // ------------------------------------------------------------------
 
@@ -268,6 +447,140 @@ impl CircuitBreaker {
 }
 
 // ------------------------------------------------------------------
+// Multi-Turn Transformation Functions (IM-4010-4012)
+// ------------------------------------------------------------------
+
+/// IM-4010: Transform MultiTurnRequest to Anthropic JSON body
+/// Handles cache_control injection for cacheable messages
+fn to_anthropic_body(req: &MultiTurnRequest) -> serde_json::Value {
+    let messages: Vec<serde_json::Value> = req
+        .messages
+        .iter()
+        .filter(|m| m.role != ChatRole::System) // System is separate field in Anthropic
+        .map(|m| {
+            if req.enable_caching && m.role == ChatRole::User {
+                // IM-4010-B1: Add cache_control to cacheable user messages
+                serde_json::json!({
+                    "role": m.role.to_provider_string("anthropic"),
+                    "content": [{
+                        "type": "text",
+                        "text": m.content,
+                        "cache_control": {"type": "ephemeral"}
+                    }]
+                })
+            } else {
+                serde_json::json!({
+                    "role": m.role.to_provider_string("anthropic"),
+                    "content": m.content
+                })
+            }
+        })
+        .collect();
+
+    let mut body = serde_json::json!({
+        "model": req.model,
+        "max_tokens": 4096,
+        "messages": messages
+    });
+
+    // Add system prompt if present
+    if let Some(ref system) = req.system {
+        if req.enable_caching {
+            // System with cache_control
+            body["system"] = serde_json::json!([{
+                "type": "text",
+                "text": system,
+                "cache_control": {"type": "ephemeral"}
+            }]);
+        } else {
+            body["system"] = serde_json::json!(system);
+        }
+    }
+
+    body
+}
+
+/// IM-4011: Transform MultiTurnRequest to OpenAI-compatible JSON body
+/// Used for OpenAI and DeepSeek (both use OpenAI-compatible format)
+fn to_openai_body(req: &MultiTurnRequest) -> serde_json::Value {
+    let mut messages: Vec<serde_json::Value> = Vec::new();
+
+    // IM-4011-B1: Add system message first if present
+    if let Some(ref system) = req.system {
+        messages.push(serde_json::json!({
+            "role": "system",
+            "content": system
+        }));
+    }
+
+    // IM-4011-B2: Add conversation history
+    for msg in &req.messages {
+        messages.push(serde_json::json!({
+            "role": msg.role.to_provider_string("openai"),
+            "content": msg.content
+        }));
+    }
+
+    // Note: Caching is AUTOMATIC for OpenAI/DeepSeek - no special handling needed
+    serde_json::json!({
+        "model": req.model,
+        "messages": messages,
+        "stream": false
+    })
+}
+
+/// IM-4012: Transform MultiTurnRequest to Gemini JSON body
+/// CRITICAL DIFFERENCES from other providers:
+/// - Uses "contents" not "messages"
+/// - Uses "parts" array with text objects
+/// - Uses "model" role not "assistant"
+/// - Uses "systemInstruction" for system prompt
+fn to_gemini_body(req: &MultiTurnRequest) -> serde_json::Value {
+    // IM-4012-V1: Gemini uses "contents" not "messages"
+    // IM-4012-V2: Gemini uses "parts" array with text objects
+    // IM-4012-V3: Gemini uses "model" role not "assistant" (handled by to_provider_string)
+    let contents: Vec<serde_json::Value> = req
+        .messages
+        .iter()
+        .filter(|m| m.role != ChatRole::System) // Handle system separately
+        .map(|m| {
+            serde_json::json!({
+                "role": m.role.to_provider_string("gemini"),
+                "parts": [{"text": m.content}]
+            })
+        })
+        .collect();
+
+    let mut body = serde_json::json!({
+        "contents": contents
+    });
+
+    // IM-4012-B1: Add system instruction if present (uses different key than messages)
+    if let Some(ref system) = req.system {
+        body["systemInstruction"] = serde_json::json!({
+            "parts": [{"text": system}]
+        });
+    }
+
+    // Note: Implicit caching is automatic on Gemini 2.5 models - no special handling
+    body
+}
+
+/// IM-4013: Transform MultiTurnRequest to streaming OpenAI body
+fn to_openai_stream_body(req: &MultiTurnRequest) -> serde_json::Value {
+    let mut body = to_openai_body(req);
+    body["stream"] = serde_json::json!(true);
+    body
+}
+
+/// IM-4014: Transform MultiTurnRequest to streaming Anthropic body
+fn to_anthropic_stream_body(req: &MultiTurnRequest) -> serde_json::Value {
+    let mut body = to_anthropic_body(req);
+    body["stream"] = serde_json::json!(true);
+    body
+}
+
+// ------------------------------------------------------------------
 // Request/Response Types
 // ------------------------------------------------------------------
 
@@ -337,7 +650,7 @@ struct GeminiPart {
     text: String,
 }
 
-// DeepSeek (OpenAI-compatible)
+// DeepSeek (OpenAI-compatible, with R1 reasoning support)
 #[derive(Debug, Deserialize)]
 struct DeepSeekResponse {
     choices: Vec<DeepSeekChoice>,
@@ -350,7 +663,12 @@ struct DeepSeekChoice {
 
 #[derive(Debug, Deserialize)]
 struct DeepSeekMessage {
-    content: String,
+    /// The final answer content
+    #[serde(default)]
+    content: Option<String>,
+    /// Chain of Thought reasoning (R1 reasoning models only)
+    #[serde(default)]
+    reasoning_content: Option<String>,
 }
 
 // DeepSeek Streaming
@@ -366,6 +684,43 @@ struct DeepSeekStreamChoice {
 
 #[derive(Debug, Deserialize)]
 struct DeepSeekStreamDelta {
+    /// The final answer content chunk
+    #[serde(default)]
+    content: Option<String>,
+    /// Chain of Thought reasoning chunk (R1 reasoning models only)
+    #[serde(default)]
+    reasoning_content: Option<String>,
+}
+
+// OpenAI (GPT models) - OpenAI-compatible format (same as DeepSeek)
+#[derive(Debug, Deserialize)]
+struct OpenAIResponse {
+    choices: Vec<OpenAIChoice>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIChoice {
+    message: OpenAIMessage,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIMessage {
+    content: String,
+}
+
+// OpenAI Streaming
+#[derive(Debug, Deserialize)]
+struct OpenAIStreamChunk {
+    choices: Vec<OpenAIStreamChoice>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIStreamChoice {
+    delta: OpenAIStreamDelta,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIStreamDelta {
     #[serde(default)]
     content: Option<String>,
 }
@@ -383,6 +738,7 @@ impl LLMClient {
         rate_limiters.insert("anthropic".to_string(), RateLimiter::new(50.0)); // 50 RPM
         rate_limiters.insert("google".to_string(), RateLimiter::new(60.0)); // 60 RPM
         rate_limiters.insert("deepseek".to_string(), RateLimiter::new(100.0)); // 100 RPM
+        rate_limiters.insert("openai".to_string(), RateLimiter::new(60.0)); // 60 RPM (Tier 1)
 
         // Configure circuit breakers per provider
         circuit_breakers.insert(
@@ -395,6 +751,10 @@ impl LLMClient {
         );
         circuit_breakers.insert(
             "deepseek".to_string(),
+            CircuitBreaker::new(5, 2, Duration::from_secs(60)),
+        );
+        circuit_breakers.insert(
+            "openai".to_string(),
             CircuitBreaker::new(5, 2, Duration::from_secs(60)),
         );
 
@@ -414,6 +774,8 @@ impl LLMClient {
             Ok("google".to_string())
         } else if model.starts_with("deepseek") {
             Ok("deepseek".to_string())
+        } else if model.starts_with("gpt") || model.starts_with("o1") || model.starts_with("o3") {
+            Ok("openai".to_string())
         } else {
             Err(LLMError::UnsupportedModel(model.to_string()))
         }
@@ -461,6 +823,8 @@ impl LLMClient {
             self.generate_gemini(req).await
         } else if req.model.starts_with("deepseek") {
             self.generate_deepseek(req).await
+        } else if req.model.starts_with("gpt") || req.model.starts_with("o1") || req.model.starts_with("o3") {
+            self.generate_openai(req).await
         } else {
             Err(anyhow!("Unsupported model: {}", req.model))
         };
@@ -504,12 +868,546 @@ impl LLMClient {
             self.generate_gemini_stream(request).await
         } else if request.model.starts_with("deepseek") {
             self.generate_deepseek_stream(request).await
+        } else if request.model.starts_with("gpt") || request.model.starts_with("o1") || request.model.starts_with("o3") {
+            self.generate_openai_stream(request).await
         } else {
             Err(anyhow!(
                 "Unsupported model for streaming: {}",
                 request.model
             ))
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Multi-Turn Conversation Methods (IM-4020-4024)
+    // ------------------------------------------------------------------
+
+    /// IM-4020: Generate text with multi-turn conversation support
+    /// Supports full conversation history with provider-specific optimizations
+    pub async fn generate_multi_turn(&mut self, req: MultiTurnRequest) -> Result<String> {
+        // Validate request
+        req.validate().map_err(|e| anyhow!("{}", e))?;
+
+        let provider_name = self.detect_provider(&req.model)?;
+
+        // Apply rate limiting BEFORE making request
+        if let Some(limiter) = self.rate_limiters.get_mut(&provider_name) {
+            match limiter.try_acquire() {
+                Ok(()) => {}
+                Err(wait_duration) => {
+                    eprintln!(
+                        "Rate limited by {} - waiting {:?}",
+                        provider_name, wait_duration
+                    );
+                    tokio::time::sleep(wait_duration).await;
+                    limiter
+                        .try_acquire()
+                        .map_err(|_| LLMError::RateLimitExceeded(provider_name.to_string()))?;
+                }
+            }
+        }
+
+        // Apply circuit breaker protection
+        if let Some(breaker) = self.circuit_breakers.get_mut(&provider_name) {
+            if let Err(CircuitBreakerError::Open) = breaker.can_execute() {
+                return Err(anyhow!(
+                    "{} circuit breaker is open (too many failures)",
+                    provider_name
+                ));
+            }
+        }
+
+        // IM-4020-B1: Route to provider-specific implementation
+        let result = match provider_name.as_str() {
+            "anthropic" => self.generate_multi_anthropic(&req).await,
+            "google" => self.generate_multi_gemini(&req).await,
+            "deepseek" => self.generate_multi_deepseek(&req).await,
+            "openai" => self.generate_multi_openai(&req).await,
+            _ => Err(anyhow!("Unsupported provider: {}", provider_name)),
+        };
+
+        // Record circuit breaker outcome
+        if let Some(breaker) = self.circuit_breakers.get_mut(&provider_name) {
+            match &result {
+                Ok(_) => breaker.record_success(),
+                Err(_) => breaker.record_failure(),
+            }
+        }
+
+        result
+    }
+
+    /// IM-4021: Anthropic multi-turn with explicit caching support
+    async fn generate_multi_anthropic(&self, req: &MultiTurnRequest) -> Result<String> {
+        let url = "https://api.anthropic.com/v1/messages";
+        let body = to_anthropic_body(req);
+
+        let mut request_builder = self
+            .client
+            .post(url)
+            .header("x-api-key", &self.api_key)
+            .header("anthropic-version", "2023-06-01")
+            .header("content-type", "application/json");
+
+        // IM-4021-B1: Add caching beta header if enabled
+        if req.enable_caching {
+            let cache_header = req
+                .cache_config
+                .as_ref()
+                .map(|c| c.ttl.to_anthropic_header())
+                .unwrap_or("prompt-caching-2024-07-31");
+            request_builder = request_builder.header("anthropic-beta", cache_header);
+        }
+
+        let res = request_builder.json(&body).send().await?;
+
+        if !res.status().is_success() {
+            let status = res.status();
+            let error_text = res.text().await?;
+            if status.as_u16() == 401 {
+                return Err(anyhow!(
+                    "Anthropic Authentication Failed (401). Error: {}",
+                    error_text
+                ));
+            }
+            return Err(anyhow!("Anthropic API Error ({}): {}", status, error_text));
+        }
+
+        let anthropic_res: AnthropicResponse = res.json().await?;
+        anthropic_res
+            .content
+            .first()
+            .map(|c| c.text.clone())
+            .ok_or_else(|| anyhow!("No content in Anthropic response"))
+    }
+
+    /// IM-4022: Gemini multi-turn with proper "model" role handling
+    async fn generate_multi_gemini(&self, req: &MultiTurnRequest) -> Result<String> {
+        let url = format!(
+            "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
+            req.model, self.api_key
+        );
+        let body = to_gemini_body(req);
+
+        let res = self
+            .client
+            .post(&url)
+            .header("content-type", "application/json")
+            .json(&body)
+            .send()
+            .await?;
+
+        if !res.status().is_success() {
+            return Err(anyhow!("Gemini API Error: {}", res.text().await?));
+        }
+
+        let gemini_res: GeminiResponse = res.json().await?;
+        gemini_res
+            .candidates
+            .first()
+            .and_then(|c| c.content.parts.first())
+            .map(|p| p.text.clone())
+            .ok_or_else(|| anyhow!("No content in Gemini response"))
+    }
+
+    /// IM-4023: DeepSeek multi-turn (OpenAI-compatible with R1 reasoning support)
+    async fn generate_multi_deepseek(&self, req: &MultiTurnRequest) -> Result<String> {
+        let url = "https://api.deepseek.com/chat/completions";
+        let body = to_openai_body(req);
+
+        // Check if this is a reasoning model (R1)
+        let is_reasoning_model = req.model.contains("reasoner");
+
+        let res = self
+            .client
+            .post(url)
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("content-type", "application/json")
+            .json(&body)
+            .send()
+            .await?;
+
+        if !res.status().is_success() {
+            return Err(anyhow!("DeepSeek API Error: {}", res.text().await?));
+        }
+
+        let deepseek_res: DeepSeekResponse = res.json().await?;
+        let message = deepseek_res
+            .choices
+            .first()
+            .map(|c| &c.message)
+            .ok_or_else(|| anyhow!("No choices in DeepSeek response"))?;
+
+        // For R1 reasoning models, combine reasoning_content and content
+        if is_reasoning_model {
+            let mut result = String::new();
+
+            if let Some(ref reasoning) = message.reasoning_content {
+                if !reasoning.is_empty() {
+                    result.push_str("## AI Reasoning Process\n\n");
+                    result.push_str(reasoning);
+                    result.push_str("\n\n---\n\n## Final Analysis\n\n");
+                }
+            }
+
+            if let Some(ref content) = message.content {
+                result.push_str(content);
+            }
+
+            if result.is_empty() {
+                return Err(anyhow!("No content in DeepSeek R1 response"));
+            }
+
+            Ok(result)
+        } else {
+            message
+                .content
+                .clone()
+                .ok_or_else(|| anyhow!("No content in DeepSeek response"))
+        }
+    }
+
+    /// IM-4024: OpenAI multi-turn (automatic caching for prompts >1024 tokens)
+    async fn generate_multi_openai(&self, req: &MultiTurnRequest) -> Result<String> {
+        let url = "https://api.openai.com/v1/chat/completions";
+        let body = to_openai_body(req);
+
+        let res = self
+            .client
+            .post(url)
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("content-type", "application/json")
+            .json(&body)
+            .send()
+            .await?;
+
+        if !res.status().is_success() {
+            let status = res.status();
+            let error_text = res.text().await?;
+            if status.as_u16() == 401 {
+                return Err(anyhow!(
+                    "OpenAI Authentication Failed (401). Error: {}",
+                    error_text
+                ));
+            }
+            return Err(anyhow!("OpenAI API Error ({}): {}", status, error_text));
+        }
+
+        let openai_res: OpenAIResponse = res.json().await?;
+        openai_res
+            .choices
+            .first()
+            .map(|c| c.message.content.clone())
+            .ok_or_else(|| anyhow!("No content in OpenAI response"))
+    }
+
+    /// IM-4030: Multi-turn streaming with conversation history
+    pub async fn generate_multi_turn_stream(
+        &mut self,
+        req: MultiTurnRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String, LLMError>> + Send>>> {
+        // Validate request
+        req.validate().map_err(|e| anyhow!("{}", e))?;
+
+        let provider_name = self.detect_provider(&req.model)?;
+
+        // Apply rate limiting before streaming
+        if let Some(limiter) = self.rate_limiters.get_mut(&provider_name) {
+            match limiter.try_acquire() {
+                Ok(()) => {}
+                Err(wait_duration) => {
+                    tokio::time::sleep(wait_duration).await;
+                    limiter.try_acquire().map_err(|_| {
+                        anyhow!(LLMError::RateLimitExceeded(provider_name.to_string()))
+                    })?;
+                }
+            }
+        }
+
+        // Route to provider-specific streaming
+        match provider_name.as_str() {
+            "anthropic" => self.stream_multi_anthropic(&req).await,
+            "google" => self.stream_multi_gemini(&req).await,
+            "deepseek" => self.stream_multi_deepseek(&req).await,
+            "openai" => self.stream_multi_openai(&req).await,
+            _ => Err(anyhow!(
+                "Unsupported provider for streaming: {}",
+                provider_name
+            )),
+        }
+    }
+
+    /// IM-4031: Anthropic multi-turn streaming with caching
+    async fn stream_multi_anthropic(
+        &self,
+        req: &MultiTurnRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String, LLMError>> + Send>>> {
+        let url = "https://api.anthropic.com/v1/messages";
+        let body = to_anthropic_stream_body(req);
+
+        let mut request_builder = self
+            .client
+            .post(url)
+            .header("x-api-key", &self.api_key)
+            .header("anthropic-version", "2023-06-01")
+            .header("content-type", "application/json");
+
+        if req.enable_caching {
+            let cache_header = req
+                .cache_config
+                .as_ref()
+                .map(|c| c.ttl.to_anthropic_header())
+                .unwrap_or("prompt-caching-2024-07-31");
+            request_builder = request_builder.header("anthropic-beta", cache_header);
+        }
+
+        let res = request_builder
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| anyhow!("Failed to start Anthropic stream: {}", e))?;
+
+        if !res.status().is_success() {
+            return Err(anyhow!("Anthropic API Error: {}", res.status()));
+        }
+
+        let stream = res.bytes_stream();
+
+        let token_stream = stream.filter_map(|chunk_result| async move {
+            match chunk_result {
+                Ok(chunk) => {
+                    let text = String::from_utf8_lossy(&chunk);
+                    for line in text.lines() {
+                        if let Some(json_str) = line.strip_prefix("data: ") {
+                            if json_str == "[DONE]" {
+                                return None;
+                            }
+                            if let Ok(event) =
+                                serde_json::from_str::<AnthropicStreamEvent>(json_str)
+                            {
+                                if event.event_type == "content_block_delta" {
+                                    if let Some(delta) = event.delta {
+                                        if let Some(text) = delta.text {
+                                            return Some(Ok(text));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    None
+                }
+                Err(e) => Some(Err(LLMError::NetworkError(e.to_string()))),
+            }
+        });
+
+        Ok(Box::pin(token_stream))
+    }
+
+    /// IM-4032: Gemini multi-turn streaming
+    async fn stream_multi_gemini(
+        &self,
+        req: &MultiTurnRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String, LLMError>> + Send>>> {
+        let url = format!(
+            "https://generativelanguage.googleapis.com/v1beta/models/{}:streamGenerateContent?key={}&alt=sse",
+            req.model, self.api_key
+        );
+        let body = to_gemini_body(req);
+
+        let res = self
+            .client
+            .post(&url)
+            .header("content-type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| anyhow!("Failed to start Gemini stream: {}", e))?;
+
+        if !res.status().is_success() {
+            let status = res.status();
+            let error_text = res.text().await.unwrap_or_default();
+            return Err(anyhow!("Gemini API Error ({}): {}", status, error_text));
+        }
+
+        let stream = res.bytes_stream();
+
+        let token_stream = stream.filter_map(|chunk_result| async move {
+            match chunk_result {
+                Ok(chunk) => {
+                    let text = String::from_utf8_lossy(&chunk);
+                    for line in text.lines() {
+                        let trimmed = line.trim();
+                        if trimmed.is_empty() || trimmed == "[" || trimmed == "]" || trimmed == ","
+                        {
+                            continue;
+                        }
+
+                        let json_str = if let Some(data) = trimmed.strip_prefix("data: ") {
+                            data
+                        } else if trimmed.starts_with('{') {
+                            trimmed
+                        } else {
+                            continue;
+                        };
+
+                        if let Ok(response) = serde_json::from_str::<GeminiResponse>(json_str) {
+                            if let Some(candidate) = response.candidates.first() {
+                                if let Some(part) = candidate.content.parts.first() {
+                                    return Some(Ok(part.text.clone()));
+                                }
+                            }
+                        }
+                    }
+                    None
+                }
+                Err(e) => Some(Err(LLMError::NetworkError(e.to_string()))),
+            }
+        });
+
+        Ok(Box::pin(token_stream))
+    }
+
+    /// IM-4033: DeepSeek multi-turn streaming
+    async fn stream_multi_deepseek(
+        &self,
+        req: &MultiTurnRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String, LLMError>> + Send>>> {
+        let url = "https://api.deepseek.com/chat/completions";
+        let body = to_openai_stream_body(req);
+
+        let is_reasoning_model = req.model.contains("reasoner");
+
+        let res = self
+            .client
+            .post(url)
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("content-type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| anyhow!("Failed to start DeepSeek stream: {}", e))?;
+
+        if !res.status().is_success() {
+            return Err(anyhow!("DeepSeek API Error: {}", res.status()));
+        }
+
+        let stream = res.bytes_stream();
+        let started_content = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let started_content_clone = started_content.clone();
+
+        let token_stream = stream.filter_map(move |chunk_result| {
+            let started_content = started_content_clone.clone();
+            let is_r1 = is_reasoning_model;
+
+            async move {
+                match chunk_result {
+                    Ok(chunk) => {
+                        let text = String::from_utf8_lossy(&chunk);
+                        let mut result_tokens = Vec::new();
+
+                        for line in text.lines() {
+                            if let Some(json_str) = line.strip_prefix("data: ") {
+                                if json_str == "[DONE]" {
+                                    continue;
+                                }
+                                if let Ok(chunk_data) =
+                                    serde_json::from_str::<DeepSeekStreamChunk>(json_str)
+                                {
+                                    if let Some(choice) = chunk_data.choices.first() {
+                                        if is_r1 {
+                                            if let Some(reasoning) = &choice.delta.reasoning_content
+                                            {
+                                                if !reasoning.is_empty() {
+                                                    result_tokens.push(reasoning.clone());
+                                                }
+                                            }
+                                        }
+                                        if let Some(content) = &choice.delta.content {
+                                            if !content.is_empty() {
+                                                if is_r1
+                                                    && !started_content
+                                                        .load(std::sync::atomic::Ordering::Relaxed)
+                                                {
+                                                    started_content.store(
+                                                        true,
+                                                        std::sync::atomic::Ordering::Relaxed,
+                                                    );
+                                                    result_tokens.push("\n\n---\n\n".to_string());
+                                                }
+                                                result_tokens.push(content.clone());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if result_tokens.is_empty() {
+                            None
+                        } else {
+                            Some(Ok(result_tokens.join("")))
+                        }
+                    }
+                    Err(e) => Some(Err(LLMError::NetworkError(e.to_string()))),
+                }
+            }
+        });
+
+        Ok(Box::pin(token_stream))
+    }
+
+    /// IM-4034: OpenAI multi-turn streaming
+    async fn stream_multi_openai(
+        &self,
+        req: &MultiTurnRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String, LLMError>> + Send>>> {
+        let url = "https://api.openai.com/v1/chat/completions";
+        let body = to_openai_stream_body(req);
+
+        let res = self
+            .client
+            .post(url)
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("content-type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| anyhow!("Failed to start OpenAI stream: {}", e))?;
+
+        if !res.status().is_success() {
+            return Err(anyhow!("OpenAI API Error: {}", res.status()));
+        }
+
+        let stream = res.bytes_stream();
+
+        let token_stream = stream.filter_map(|chunk_result| async move {
+            match chunk_result {
+                Ok(chunk) => {
+                    let text = String::from_utf8_lossy(&chunk);
+                    for line in text.lines() {
+                        if let Some(json_str) = line.strip_prefix("data: ") {
+                            if json_str == "[DONE]" {
+                                return None;
+                            }
+                            if let Ok(chunk_data) =
+                                serde_json::from_str::<OpenAIStreamChunk>(json_str)
+                            {
+                                if let Some(choice) = chunk_data.choices.first() {
+                                    if let Some(content) = &choice.delta.content {
+                                        return Some(Ok(content.clone()));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    None
+                }
+                Err(e) => Some(Err(LLMError::NetworkError(e.to_string()))),
+            }
+        });
+
+        Ok(Box::pin(token_stream))
     }
 
     // ------------------------------------------------------------------
@@ -611,6 +1509,9 @@ impl LLMClient {
     async fn generate_deepseek(&self, req: LLMRequest) -> Result<String> {
         let url = "https://api.deepseek.com/chat/completions";
 
+        // Check if this is a reasoning model (R1)
+        let is_reasoning_model = req.model.contains("reasoner");
+
         let body = serde_json::json!({
             "model": req.model,
             "messages": [
@@ -635,11 +1536,94 @@ impl LLMClient {
 
         let deepseek_res: DeepSeekResponse = res.json().await?;
 
-        deepseek_res
+        let message = deepseek_res
+            .choices
+            .first()
+            .map(|c| &c.message)
+            .ok_or_else(|| anyhow!("No choices in DeepSeek response"))?;
+
+        // For R1 reasoning models, combine reasoning_content and content
+        // The reasoning shows the model's thinking process
+        if is_reasoning_model {
+            let mut result = String::new();
+
+            // Include reasoning if present (shows AI's thought process)
+            if let Some(ref reasoning) = message.reasoning_content {
+                if !reasoning.is_empty() {
+                    result.push_str("## AI Reasoning Process\n\n");
+                    result.push_str(reasoning);
+                    result.push_str("\n\n---\n\n## Final Analysis\n\n");
+                }
+            }
+
+            // Include final content
+            if let Some(ref content) = message.content {
+                result.push_str(content);
+            }
+
+            if result.is_empty() {
+                return Err(anyhow!("No content in DeepSeek R1 response"));
+            }
+
+            Ok(result)
+        } else {
+            // For non-reasoning models (deepseek-chat), just return content
+            message.content
+                .clone()
+                .ok_or_else(|| anyhow!("No content in DeepSeek response"))
+        }
+    }
+
+    async fn generate_openai(&self, req: LLMRequest) -> Result<String> {
+        let url = "https://api.openai.com/v1/chat/completions";
+
+        // Debug: Log key prefix (first 10 chars only for security)
+        let key_prefix = if self.api_key.len() > 10 {
+            &self.api_key[..10]
+        } else {
+            &self.api_key
+        };
+        println!("[DEBUG] OpenAI request with key prefix: {}... (len={})", key_prefix, self.api_key.len());
+
+        // Validate key format
+        if !self.api_key.starts_with("sk-") {
+            return Err(anyhow!("Invalid OpenAI API key format. Key should start with 'sk-'. Got prefix: '{}'", key_prefix));
+        }
+
+        let body = serde_json::json!({
+            "model": req.model,
+            "messages": [
+                {"role": "system", "content": req.system},
+                {"role": "user", "content": req.user}
+            ],
+            "max_tokens": 4096
+        });
+
+        let res = self
+            .client
+            .post(url)
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("content-type", "application/json")
+            .json(&body)
+            .send()
+            .await?;
+
+        if !res.status().is_success() {
+            let status = res.status();
+            let error_text = res.text().await?;
+            if status.as_u16() == 401 {
+                return Err(anyhow!("OpenAI Authentication Failed (401). Please verify your API key is valid and active. Error: {}", error_text));
+            }
+            return Err(anyhow!("OpenAI API Error ({}): {}", status, error_text));
+        }
+
+        let openai_res: OpenAIResponse = res.json().await?;
+
+        openai_res
             .choices
             .first()
             .map(|c| c.message.content.clone())
-            .ok_or_else(|| anyhow!("No content in DeepSeek response"))
+            .ok_or_else(|| anyhow!("No content in OpenAI response"))
     }
 
     // ------------------------------------------------------------------
@@ -717,14 +1701,17 @@ impl LLMClient {
 
     /// Gemini newline-delimited JSON streaming implementation
     /// IM-3015-STREAM-2: Gemini JSON stream parsing
+    /// Note: Gemini streamGenerateContent returns JSON array chunks that need special parsing
     async fn generate_gemini_stream(
         &self,
         req: LLMRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<String, LLMError>> + Send>>> {
         let url = format!(
-            "https://generativelanguage.googleapis.com/v1beta/models/{}:streamGenerateContent?key={}",
+            "https://generativelanguage.googleapis.com/v1beta/models/{}:streamGenerateContent?key={}&alt=sse",
             req.model, self.api_key
         );
+
+        println!("[DEBUG] Gemini stream URL: {}", url.replace(&self.api_key, "***KEY***"));
 
         let body = serde_json::json!({
             "contents": [{
@@ -744,28 +1731,58 @@ impl LLMClient {
             .map_err(|e| anyhow!("Failed to start Gemini stream: {}", e))?;
 
         if !res.status().is_success() {
-            return Err(anyhow!("Gemini API Error: {}", res.status()));
+            let status = res.status();
+            let error_text = res.text().await.unwrap_or_default();
+            println!("[DEBUG] Gemini API Error {}: {}", status, error_text);
+            return Err(anyhow!("Gemini API Error ({}): {}", status, error_text));
         }
 
+        println!("[DEBUG] Gemini stream connected successfully");
         let stream = res.bytes_stream();
 
+        // Gemini with alt=sse returns SSE format: "data: {json}\n\n"
         let token_stream = stream.filter_map(|chunk_result| async move {
             match chunk_result {
                 Ok(chunk) => {
                     let text = String::from_utf8_lossy(&chunk);
+                    println!("[DEBUG] Gemini chunk: {}", &text[..text.len().min(200)]);
 
+                    // Parse SSE format: "data: {...}\n\n"
                     for line in text.lines() {
-                        if let Ok(response) = serde_json::from_str::<GeminiResponse>(line) {
+                        // Skip empty lines and array brackets
+                        let trimmed = line.trim();
+                        if trimmed.is_empty() || trimmed == "[" || trimmed == "]" || trimmed == "," {
+                            continue;
+                        }
+
+                        // Handle SSE format
+                        let json_str = if let Some(data) = trimmed.strip_prefix("data: ") {
+                            data
+                        } else if trimmed.starts_with('{') {
+                            // Direct JSON object (non-SSE format)
+                            trimmed
+                        } else {
+                            continue;
+                        };
+
+                        // Try to parse the JSON
+                        if let Ok(response) = serde_json::from_str::<GeminiResponse>(json_str) {
                             if let Some(candidate) = response.candidates.first() {
                                 if let Some(part) = candidate.content.parts.first() {
+                                    println!("[DEBUG] Gemini extracted text: {}...", &part.text[..part.text.len().min(50)]);
                                     return Some(Ok(part.text.clone()));
                                 }
                             }
+                        } else {
+                            println!("[DEBUG] Failed to parse Gemini JSON: {}", &json_str[..json_str.len().min(100)]);
                         }
                     }
                     None
                 }
-                Err(e) => Some(Err(LLMError::NetworkError(e.to_string()))),
+                Err(e) => {
+                    println!("[DEBUG] Gemini stream error: {}", e);
+                    Some(Err(LLMError::NetworkError(e.to_string())))
+                }
             }
         });
 
@@ -774,11 +1791,15 @@ impl LLMClient {
 
     /// DeepSeek OpenAI-compatible SSE streaming implementation
     /// IM-3015-STREAM-3: DeepSeek OpenAI-compatible SSE parsing
+    /// Updated to support R1 reasoning models which stream reasoning_content before content
     async fn generate_deepseek_stream(
         &self,
         req: LLMRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<String, LLMError>> + Send>>> {
         let url = "https://api.deepseek.com/chat/completions";
+
+        // Check if this is a reasoning model (R1)
+        let is_reasoning_model = req.model.contains("reasoner");
 
         let body = serde_json::json!({
             "model": req.model,
@@ -805,6 +1826,102 @@ impl LLMClient {
 
         let stream = res.bytes_stream();
 
+        // Track if we've started receiving final content (for R1 formatting)
+        let started_content = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let started_content_clone = started_content.clone();
+
+        let token_stream = stream.filter_map(move |chunk_result| {
+            let started_content = started_content_clone.clone();
+            let is_r1 = is_reasoning_model;
+
+            async move {
+                match chunk_result {
+                    Ok(chunk) => {
+                        let text = String::from_utf8_lossy(&chunk);
+                        let mut result_tokens = Vec::new();
+
+                        for line in text.lines() {
+                            if let Some(json_str) = line.strip_prefix("data: ") {
+                                if json_str == "[DONE]" {
+                                    continue;
+                                }
+
+                                if let Ok(chunk_data) =
+                                    serde_json::from_str::<DeepSeekStreamChunk>(json_str)
+                                {
+                                    if let Some(choice) = chunk_data.choices.first() {
+                                        // For R1 models, stream reasoning_content first
+                                        if is_r1 {
+                                            if let Some(reasoning) = &choice.delta.reasoning_content {
+                                                if !reasoning.is_empty() {
+                                                    result_tokens.push(reasoning.clone());
+                                                }
+                                            }
+                                        }
+
+                                        // Stream content (final answer)
+                                        if let Some(content) = &choice.delta.content {
+                                            if !content.is_empty() {
+                                                // For R1, add separator when transitioning from reasoning to content
+                                                if is_r1 && !started_content.load(std::sync::atomic::Ordering::Relaxed) {
+                                                    started_content.store(true, std::sync::atomic::Ordering::Relaxed);
+                                                    result_tokens.push("\n\n---\n\n".to_string());
+                                                }
+                                                result_tokens.push(content.clone());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if result_tokens.is_empty() {
+                            None
+                        } else {
+                            Some(Ok(result_tokens.join("")))
+                        }
+                    }
+                    Err(e) => Some(Err(LLMError::NetworkError(e.to_string()))),
+                }
+            }
+        });
+
+        Ok(Box::pin(token_stream))
+    }
+
+    /// OpenAI SSE streaming implementation
+    /// IM-3015-STREAM-4: OpenAI SSE parsing (same format as DeepSeek)
+    async fn generate_openai_stream(
+        &self,
+        req: LLMRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String, LLMError>> + Send>>> {
+        let url = "https://api.openai.com/v1/chat/completions";
+
+        let body = serde_json::json!({
+            "model": req.model,
+            "messages": [
+                {"role": "system", "content": req.system},
+                {"role": "user", "content": req.user}
+            ],
+            "stream": true
+        });
+
+        let res = self
+            .client
+            .post(url)
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("content-type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| anyhow!("Failed to start OpenAI stream: {}", e))?;
+
+        if !res.status().is_success() {
+            return Err(anyhow!("OpenAI API Error: {}", res.status()));
+        }
+
+        let stream = res.bytes_stream();
+
         let token_stream = stream.filter_map(|chunk_result| async move {
             match chunk_result {
                 Ok(chunk) => {
@@ -817,7 +1934,7 @@ impl LLMClient {
                             }
 
                             if let Ok(chunk_data) =
-                                serde_json::from_str::<DeepSeekStreamChunk>(json_str)
+                                serde_json::from_str::<OpenAIStreamChunk>(json_str)
                             {
                                 if let Some(choice) = chunk_data.choices.first() {
                                     if let Some(content) = &choice.delta.content {
@@ -1489,5 +2606,324 @@ mod tests {
             limiter.try_acquire().is_ok(),
             "Tokens should refill over time"
         );
+    }
+
+    // ============================================================================
+    // Battery 4.13: Multi-Turn Conversation Tests (IM-4001-4042)
+    // ============================================================================
+
+    #[test]
+    fn test_chat_role_to_provider_string_anthropic() {
+        // TEST-MT-001: Verify ChatRole::to_provider_string() for Anthropic
+        assert_eq!(ChatRole::System.to_provider_string("anthropic"), "system");
+        assert_eq!(ChatRole::User.to_provider_string("anthropic"), "user");
+        assert_eq!(
+            ChatRole::Assistant.to_provider_string("anthropic"),
+            "assistant"
+        );
+    }
+
+    #[test]
+    fn test_chat_role_to_provider_string_openai() {
+        // TEST-MT-002: Verify ChatRole::to_provider_string() for OpenAI
+        assert_eq!(ChatRole::System.to_provider_string("openai"), "system");
+        assert_eq!(ChatRole::User.to_provider_string("openai"), "user");
+        assert_eq!(
+            ChatRole::Assistant.to_provider_string("openai"),
+            "assistant"
+        );
+    }
+
+    #[test]
+    fn test_chat_role_to_provider_string_deepseek() {
+        // TEST-MT-003: Verify ChatRole::to_provider_string() for DeepSeek
+        assert_eq!(ChatRole::System.to_provider_string("deepseek"), "system");
+        assert_eq!(ChatRole::User.to_provider_string("deepseek"), "user");
+        assert_eq!(
+            ChatRole::Assistant.to_provider_string("deepseek"),
+            "assistant"
+        );
+    }
+
+    #[test]
+    fn test_chat_role_to_provider_string_gemini_critical() {
+        // TEST-MT-004: CRITICAL - Verify Gemini uses "model" instead of "assistant"
+        assert_eq!(ChatRole::System.to_provider_string("gemini"), "system");
+        assert_eq!(ChatRole::User.to_provider_string("gemini"), "user");
+        // CRITICAL: Gemini uses "model" role, NOT "assistant"
+        assert_eq!(
+            ChatRole::Assistant.to_provider_string("gemini"),
+            "model",
+            "CRITICAL: Gemini must use 'model' role, not 'assistant'"
+        );
+        // Also test "google" provider
+        assert_eq!(
+            ChatRole::Assistant.to_provider_string("google"),
+            "model",
+            "CRITICAL: Google must use 'model' role, not 'assistant'"
+        );
+    }
+
+    #[test]
+    fn test_chat_message_constructors() {
+        // TEST-MT-010: Verify ChatMessage constructors
+        let user_msg = ChatMessage::user("Hello");
+        assert_eq!(user_msg.role, ChatRole::User);
+        assert_eq!(user_msg.content, "Hello");
+
+        let assistant_msg = ChatMessage::assistant("Hi there");
+        assert_eq!(assistant_msg.role, ChatRole::Assistant);
+        assert_eq!(assistant_msg.content, "Hi there");
+
+        let system_msg = ChatMessage::system("You are helpful");
+        assert_eq!(system_msg.role, ChatRole::System);
+        assert_eq!(system_msg.content, "You are helpful");
+    }
+
+    #[test]
+    fn test_chat_message_new() {
+        // TEST-MT-011: Verify ChatMessage::new() method
+        let msg = ChatMessage::new(ChatRole::User, "Test message");
+        assert_eq!(msg.role, ChatRole::User);
+        assert_eq!(msg.content, "Test message");
+    }
+
+    #[test]
+    fn test_multi_turn_request_builder() {
+        // TEST-MT-020: Verify MultiTurnRequest builder pattern
+        let req = MultiTurnRequest::new("claude-sonnet-4-5-20250929")
+            .with_system("You are a helpful assistant")
+            .with_message(ChatMessage::user("Hello"))
+            .with_message(ChatMessage::assistant("Hi there!"))
+            .with_message(ChatMessage::user("How are you?"));
+
+        assert_eq!(req.model, "claude-sonnet-4-5-20250929");
+        assert_eq!(req.system, Some("You are a helpful assistant".to_string()));
+        assert_eq!(req.messages.len(), 3);
+        assert!(!req.enable_caching);
+    }
+
+    #[test]
+    fn test_multi_turn_request_with_caching() {
+        // TEST-MT-021: Verify MultiTurnRequest caching configuration
+        let req = MultiTurnRequest::new("claude-sonnet-4-5-20250929")
+            .with_system("System")
+            .with_message(ChatMessage::user("User message"))
+            .with_caching();
+
+        assert!(req.enable_caching);
+        assert!(req.cache_config.is_some());
+        assert_eq!(
+            req.cache_config.as_ref().unwrap().ttl,
+            CacheTTL::FiveMinutes
+        );
+    }
+
+    #[test]
+    fn test_multi_turn_request_cache_config() {
+        // TEST-MT-022: Verify custom CacheConfig
+        let config = CacheConfig {
+            ttl: CacheTTL::OneHour,
+        };
+        let req = MultiTurnRequest::new("claude-sonnet-4-5-20250929").with_cache_config(config);
+
+        assert!(req.enable_caching);
+        assert_eq!(req.cache_config.as_ref().unwrap().ttl, CacheTTL::OneHour);
+    }
+
+    #[test]
+    fn test_multi_turn_request_without_caching() {
+        // TEST-MT-023: Verify without_caching() disables caching
+        let req = MultiTurnRequest::new("gpt-4")
+            .with_caching()
+            .without_caching();
+
+        assert!(!req.enable_caching);
+        assert!(req.cache_config.is_none());
+    }
+
+    #[test]
+    fn test_multi_turn_request_validate_empty() {
+        // TEST-MT-024: Verify validation fails for empty history
+        let req = MultiTurnRequest::new("gpt-4");
+        let result = req.validate();
+
+        assert!(result.is_err());
+        match result {
+            Err(MultiTurnError::EmptyHistory) => {} // Expected
+            _ => panic!("Expected EmptyHistory error"),
+        }
+    }
+
+    #[test]
+    fn test_multi_turn_request_validate_system_only() {
+        // TEST-MT-025: Verify system-only request is valid
+        let req = MultiTurnRequest::new("gpt-4").with_system("System instruction");
+        let result = req.validate();
+
+        assert!(result.is_ok(), "System-only request should be valid");
+    }
+
+    #[test]
+    fn test_cache_ttl_to_anthropic_header() {
+        // TEST-MT-030: Verify CacheTTL header generation
+        assert_eq!(
+            CacheTTL::FiveMinutes.to_anthropic_header(),
+            "prompt-caching-2024-07-31"
+        );
+        assert_eq!(
+            CacheTTL::OneHour.to_anthropic_header(),
+            "extended-cache-ttl-2025-04-11"
+        );
+    }
+
+    #[test]
+    fn test_cache_config_default() {
+        // TEST-MT-031: Verify CacheConfig default is FiveMinutes
+        let config = CacheConfig::default();
+        assert_eq!(config.ttl, CacheTTL::FiveMinutes);
+    }
+
+    #[test]
+    fn test_to_anthropic_body_basic() {
+        // TEST-MT-040: Verify to_anthropic_body() basic transformation
+        let req = MultiTurnRequest::new("claude-sonnet-4-5-20250929")
+            .with_system("System prompt")
+            .with_message(ChatMessage::user("Hello"))
+            .with_message(ChatMessage::assistant("Hi there"));
+
+        let body = to_anthropic_body(&req);
+
+        assert_eq!(body["model"], "claude-sonnet-4-5-20250929");
+        assert_eq!(body["system"], "System prompt");
+        assert_eq!(body["messages"].as_array().unwrap().len(), 2);
+        assert_eq!(body["messages"][0]["role"], "user");
+        assert_eq!(body["messages"][1]["role"], "assistant");
+    }
+
+    #[test]
+    fn test_to_anthropic_body_with_caching() {
+        // TEST-MT-041: Verify to_anthropic_body() adds cache_control when enabled
+        let req = MultiTurnRequest::new("claude-sonnet-4-5-20250929")
+            .with_system("Cached system")
+            .with_message(ChatMessage::user("Cached user message"))
+            .with_caching();
+
+        let body = to_anthropic_body(&req);
+
+        // System should have cache_control
+        assert!(body["system"].is_array(), "System should be array with cache_control");
+        assert!(body["system"][0]["cache_control"].is_object());
+
+        // User message should have cache_control in content block
+        let msg = &body["messages"][0];
+        assert!(msg["content"].is_array());
+        assert!(msg["content"][0]["cache_control"].is_object());
+    }
+
+    #[test]
+    fn test_to_openai_body_basic() {
+        // TEST-MT-060: Verify to_openai_body() transformation
+        let req = MultiTurnRequest::new("gpt-4o")
+            .with_system("System prompt")
+            .with_message(ChatMessage::user("Hello"))
+            .with_message(ChatMessage::assistant("Hi"));
+
+        let body = to_openai_body(&req);
+
+        assert_eq!(body["model"], "gpt-4o");
+        assert_eq!(body["stream"], false);
+
+        // Messages should include system as first message
+        let messages = body["messages"].as_array().unwrap();
+        assert_eq!(messages.len(), 3);
+        assert_eq!(messages[0]["role"], "system");
+        assert_eq!(messages[1]["role"], "user");
+        assert_eq!(messages[2]["role"], "assistant");
+    }
+
+    #[test]
+    fn test_to_gemini_body_uses_contents_and_parts() {
+        // TEST-MT-050: Verify to_gemini_body() uses "contents" and "parts" structure
+        let req = MultiTurnRequest::new("gemini-2.5-pro")
+            .with_message(ChatMessage::user("Hello"))
+            .with_message(ChatMessage::assistant("Hi"));
+
+        let body = to_gemini_body(&req);
+
+        // Must use "contents" not "messages"
+        assert!(body["contents"].is_array(), "Gemini must use 'contents' not 'messages'");
+        assert!(body["messages"].is_null(), "Gemini must not have 'messages'");
+
+        // Each content must use "parts" array
+        let contents = body["contents"].as_array().unwrap();
+        assert!(contents[0]["parts"].is_array(), "Gemini must use 'parts' array");
+        assert!(contents[0]["parts"][0]["text"].is_string());
+    }
+
+    #[test]
+    fn test_to_gemini_body_uses_model_role() {
+        // TEST-MT-051: CRITICAL - Verify Gemini uses "model" role not "assistant"
+        let req = MultiTurnRequest::new("gemini-2.5-pro")
+            .with_message(ChatMessage::user("Hello"))
+            .with_message(ChatMessage::assistant("Hi there"));
+
+        let body = to_gemini_body(&req);
+        let contents = body["contents"].as_array().unwrap();
+
+        assert_eq!(contents[0]["role"], "user");
+        assert_eq!(
+            contents[1]["role"], "model",
+            "CRITICAL: Gemini must use 'model' role, not 'assistant'"
+        );
+    }
+
+    #[test]
+    fn test_to_gemini_body_system_instruction() {
+        // TEST-MT-052: Verify Gemini uses "systemInstruction" for system prompt
+        let req = MultiTurnRequest::new("gemini-2.5-pro")
+            .with_system("You are helpful")
+            .with_message(ChatMessage::user("Hi"));
+
+        let body = to_gemini_body(&req);
+
+        assert!(
+            body["systemInstruction"].is_object(),
+            "Gemini must use 'systemInstruction' for system prompt"
+        );
+        assert!(body["systemInstruction"]["parts"].is_array());
+        assert_eq!(body["systemInstruction"]["parts"][0]["text"], "You are helpful");
+    }
+
+    #[test]
+    fn test_multi_turn_error_display() {
+        // TEST-MT-200: Verify MultiTurnError Display implementations
+        let empty = MultiTurnError::EmptyHistory;
+        assert!(empty.to_string().contains("Empty"));
+
+        let ordering = MultiTurnError::InvalidOrdering("test".to_string());
+        assert!(ordering.to_string().contains("Invalid"));
+
+        let ctx_len = MultiTurnError::ContextLengthExceeded(4096);
+        assert!(ctx_len.to_string().contains("4096"));
+
+        let role = MultiTurnError::RoleTransformError("test".to_string());
+        assert!(role.to_string().contains("Role"));
+    }
+
+    #[test]
+    fn test_multi_turn_request_with_messages_batch() {
+        // TEST-MT-026: Verify with_messages() adds multiple messages at once
+        let messages = vec![
+            ChatMessage::user("First"),
+            ChatMessage::assistant("Response"),
+            ChatMessage::user("Second"),
+        ];
+
+        let req = MultiTurnRequest::new("gpt-4").with_messages(messages);
+
+        assert_eq!(req.messages.len(), 3);
+        assert_eq!(req.messages[0].content, "First");
+        assert_eq!(req.messages[2].content, "Second");
     }
 }

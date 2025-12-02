@@ -1,0 +1,227 @@
+{
+  "_meta": {
+    "name": "Fullintel Agent Design System",
+    "version": "3.0.0",
+    "description": "Monochromatic desaturated blue palette - Light theme, 12 shades navy to pale",
+    "updated": "2025-11-29",
+    "previews": ["ui-preview.html", "ui-preview-all-states.html"]
+  },
+
+  "colors": {
+    "_description": "12-shade monochromatic blue palette from navy to palest",
+
+    "blue": {
+      "950": "#0a1628",
+      "900": "#0f1f38",
+      "800": "#1a3050",
+      "700": "#264168",
+      "600": "#3a5a8a",
+      "500": "#4d6fa3",
+      "400": "#7a9bc4",
+      "300": "#a3bbd8",
+      "200": "#c8d8ec",
+      "100": "#e3ecf6",
+      "50": "#f0f5fb",
+      "25": "#f7fafd"
+    },
+
+    "cream": "#fdfcfa",
+
+    "semantic": {
+      "bg": {
+        "app": "#fdfcfa",
+        "sidebar": "#e3ecf6",
+        "main": "#fdfcfa",
+        "input": "#ffffff",
+        "hover": "#c8d8ec",
+        "card": "#ffffff"
+      },
+      "text": {
+        "primary": "#0f1f38",
+        "secondary": "#264168",
+        "muted": "#4d6fa3",
+        "faint": "#7a9bc4"
+      },
+      "border": {
+        "default": "#c8d8ec",
+        "subtle": "#e3ecf6"
+      },
+      "status": {
+        "valid": "#4a9",
+        "invalid": "#c66",
+        "empty": "#7a9bc4",
+        "active": "#4d6fa3",
+        "complete": "#1a3050",
+        "pending": "#c8d8ec"
+      }
+    },
+
+    "button": {
+      "primary": {
+        "bg": "#3a5a8a",
+        "bgHover": "#264168",
+        "text": "#ffffff"
+      },
+      "secondary": {
+        "bg": "#e3ecf6",
+        "bgHover": "#c8d8ec",
+        "text": "#264168"
+      },
+      "ghost": {
+        "bg": "transparent",
+        "bgHover": "#c8d8ec",
+        "text": "#4d6fa3"
+      },
+      "subtle": {
+        "bg": "#a3bbd8",
+        "bgHover": "#7a9bc4",
+        "text": "#264168"
+      }
+    },
+
+    "input": {
+      "bg": "#ffffff",
+      "border": "#c8d8ec",
+      "borderFocus": "#4d6fa3",
+      "placeholder": "#7a9bc4"
+    }
+  },
+
+  "spacing": {
+    "_description": "4px base unit system",
+    "unit": 4,
+    "1": "4px",
+    "2": "8px",
+    "3": "12px",
+    "4": "16px",
+    "5": "20px",
+    "6": "24px",
+    "8": "32px"
+  },
+
+  "typography": {
+    "_description": "Light, clean typography - weights 300-400 only",
+
+    "fontFamily": {
+      "sans": "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+    },
+
+    "fontSize": {
+      "xs": "8px",
+      "sm": "10px",
+      "base": "11px",
+      "md": "12px",
+      "lg": "13px",
+      "xl": "14px",
+      "2xl": "16px",
+      "3xl": "18px"
+    },
+
+    "fontWeight": {
+      "light": 300,
+      "normal": 400,
+      "medium": 500
+    },
+
+    "lineHeight": {
+      "tight": 1.4,
+      "normal": 1.5,
+      "relaxed": 1.6
+    }
+  },
+
+  "radius": {
+    "none": "0",
+    "sm": "2px",
+    "md": "3px",
+    "lg": "4px",
+    "xl": "6px",
+    "full": "9999px"
+  },
+
+  "transition": {
+    "fast": "100ms ease",
+    "normal": "150ms ease"
+  },
+
+  "layout": {
+    "sidebar": {
+      "width": "220px"
+    },
+    "content": {
+      "maxWidth": "720px",
+      "minHeight": "65vh"
+    },
+    "modal": {
+      "width": "360px",
+      "widthLarge": "400px"
+    },
+    "settingsSidebar": {
+      "width": "200px"
+    }
+  },
+
+  "components": {
+    "button": {
+      "height": "26px",
+      "padding": "0 10px",
+      "radius": "3px",
+      "fontSize": "11px"
+    },
+    "buttonLarge": {
+      "height": "36px",
+      "padding": "10px 16px",
+      "radius": "3px",
+      "fontSize": "12px"
+    },
+    "input": {
+      "height": "36px",
+      "padding": "8px 10px",
+      "radius": "3px",
+      "fontSize": "12px"
+    },
+    "inputSmall": {
+      "padding": "2px 16px 2px 4px",
+      "radius": "2px",
+      "fontSize": "8px"
+    },
+    "card": {
+      "padding": "16px",
+      "radius": "4px"
+    },
+    "chatInput": {
+      "padding": "8px 16px",
+      "radius": "0"
+    },
+    "modal": {
+      "padding": "16px",
+      "radius": "6px"
+    }
+  },
+
+  "pages": {
+    "login": {
+      "containerWidth": "360px",
+      "containerPadding": "32px",
+      "background": "linear-gradient(135deg, #e3ecf6 0%, #fdfcfa 100%)"
+    },
+    "settings": {
+      "sidebarWidth": "200px",
+      "contentMaxWidth": "400px"
+    }
+  },
+
+  "securityQuestions": [
+    "In what city were you born?",
+    "Mother's maiden name?",
+    "Favorite food?"
+  ],
+
+  "llmProviders": [
+    { "id": "claude-sonnet-4", "name": "Claude Sonnet 4", "provider": "Anthropic" },
+    { "id": "claude-opus-4", "name": "Claude Opus 4", "provider": "Anthropic" },
+    { "id": "gpt-4o", "name": "GPT-4o", "provider": "OpenAI" },
+    { "id": "gemini-2", "name": "Gemini 2.0", "provider": "Google" },
+    { "id": "deepseek-r1", "name": "DeepSeek R1", "provider": "DeepSeek" }
+  ]
+}

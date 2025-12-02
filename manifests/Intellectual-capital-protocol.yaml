@@ -1,0 +1,61 @@
+manifest:
+  id: "Intellectual-Capital-Protocol"
+  version: "1.0.0"
+  name: "Rare Talent & IP Cluster Analysis"
+  description: "A protocol to map human capital density, tracking where specific expertise is aggregating."
+
+schemas:
+  TalentCluster:
+    fields:
+      - name: domain_expertise
+      - name: geographic_hub
+      - name: host_institution
+        enum: [UNIVERSITY, CORPORATE_LAB, STARTUP_STEALTH, GOV_AGENCY]
+      - name: key_minds
+        type: list
+
+  MigrationPattern:
+    fields:
+      - name: direction
+        enum: [ACADEMIA_TO_INDUSTRY, INDUSTRY_TO_STARTUP, BRAIN_DRAIN]
+      - name: catalyst_event
+        description: "Why are they moving? (e.g., Grant funding cut, IPO)."
+
+phases:
+  - id: "PHASE-01-HEADHUNT"
+    name: "Key Mind Identification"
+    tools: ["search_tool", "scholar_search"]
+    input: "knowledge_domain"
+    instructions: |
+      Identify the top 10 most cited authors/inventors in 'knowledge_domain' active in [CURRENT_YEAR].
+      1. Where is their primary affiliation AS OF [TODAY'S DATE]?
+      2. Are they publishing or patenting?
+    output_schema: "TalentCluster"
+
+  - id: "PHASE-02-MIGRATION"
+    name: "Movement Analysis"
+    dependencies: ["PHASE-01-HEADHUNT"]
+    logic_map:
+      HIGH_ACADEMIC_EXIT:
+        signal: "TECHNOLOGY_COMMERCIALIZING"
+      HIGH_STARTUP_EXIT:
+        signal: "SECTOR_CONSOLIDATION"
+    instructions: |
+      Trace the movement of these key minds over the last 24 months.
+      Use the Logic Map to interpret what their movement means for the industry.
+    output_schema: "MigrationPattern"
+
+  - id: "PHASE-03-SYNTHESIS"
+    name: "Brain Trust Report"
+    dependencies: ["ALL"]
+    instructions: |
+      Synthesize:
+      1. **The Hubs:** Where is the genius clustering?
+      2. **The Flow:** Where is the talent going?
+      3. **The Asset:** Who holds the most IP?
+    output_target: "markdown_file"
+
+quality_gates:
+  - phase: "PHASE-01-HEADHUNT"
+    check: "Are the individuals identified actually alive and active?"
+    fail_action: "FILTER_INACTIVE"

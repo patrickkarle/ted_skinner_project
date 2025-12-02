@@ -9,7 +9,7 @@ edition = "2021"
 tauri-build = { version = "2.0", features = [] }
 
 [dependencies]
-tauri = { version = "2.0", features = [] }
+tauri = { version = "2.0", features = ["image-ico", "image-png"] }
 tauri-plugin-shell = "2.0"
 tauri-plugin-dialog = "2.0"
 tauri-plugin-fs = "2.0"
@@ -30,6 +30,9 @@ aes-gcm = "0.10"            # AES-256-GCM encryption for API keys
 rusqlite = { version = "0.31", features = ["bundled"] }  # SQLite database
 rand = "0.8"                # Cryptographic random number generation
 base64 = "0.22"             # Encoding encrypted data
+
+# Date/Time
+chrono = "0.4"              # Current date injection for research prompts
 
 [dev-dependencies]
 tempfile = "3.8"

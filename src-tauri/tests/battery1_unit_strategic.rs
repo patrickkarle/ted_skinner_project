@@ -481,7 +481,7 @@ quality_gates: []
     let manifest = Manifest::load_from_file(file.path()).unwrap();
 
     // Test agent construction
-    let agent = Agent::new(manifest, "test-key-123".to_string(), None, None);
+    let agent = Agent::new(manifest, "test-key-123".to_string(), None, None, None);
 
     // Verify initial state
     assert!(agent.get_context("nonexistent").is_none());
@@ -1105,13 +1105,13 @@ quality_gates: []
     let manifest = Manifest::load_from_file(file.path()).unwrap();
 
     // 1. Create agent with API key and no window
-    let agent1 = Agent::new(manifest.clone(), "test-key-1".to_string(), None, None);
+    let agent1 = Agent::new(manifest.clone(), "test-key-1".to_string(), None, None, None);
 
     // 2. Verify agent initializes with empty context
     assert_eq!(agent1.get_context("any_key"), None);
 
     // 3. Create another agent with different key
-    let agent2 = Agent::new(manifest.clone(), "test-key-2".to_string(), None, None);
+    let agent2 = Agent::new(manifest.clone(), "test-key-2".to_string(), None, None, None);
     assert_eq!(agent2.get_context("missing"), None);
 
     // Validates: Agent::new constructor, manifest loading, initial state, LLMClient creation
@@ -1146,7 +1146,7 @@ quality_gates: []
     let manifest = Manifest::load_from_file(file.path()).unwrap();
 
     // 1. Create agent
-    let agent = Agent::new(manifest, "test-key".to_string(), None);
+    let agent = Agent::new(manifest, "test-key".to_string(), None, None, None);
 
     // 2. Test various missing keys return None
     assert_eq!(agent.get_context("nonexistent"), None);
@@ -1232,8 +1232,8 @@ quality_gates: []
     let manifest2 = Manifest::load_from_file(file2.path()).unwrap();
 
     // 3. Create agents with different manifests
-    let _agent1 = Agent::new(manifest1, "key1".to_string(), None, None);
-    let _agent2 = Agent::new(manifest2, "key2".to_string(), None, None);
+    let _agent1 = Agent::new(manifest1, "key1".to_string(), None, None, None);
+    let _agent2 = Agent::new(manifest2, "key2".to_string(), None, None, None);
 
     // Validates: Multiple manifest loading, Agent initialization with different manifests, isolation
 }
@@ -1267,18 +1267,18 @@ quality_gates: []
     let manifest = Manifest::load_from_file(file.path()).unwrap();
 
     // 1. Test with different API keys
-    let agent1 = Agent::new(manifest.clone(), "key-1".to_string(), None, None);
+    let agent1 = Agent::new(manifest.clone(), "key-1".to_string(), None, None, None);
     assert_eq!(agent1.get_context("test"), None);
 
-    let agent2 = Agent::new(manifest.clone(), "different-key-2".to_string(), None, None);
+    let agent2 = Agent::new(manifest.clone(), "different-key-2".to_string(), None, None, None);
     assert_eq!(agent2.get_context("test"), None);
 
     // 2. Test with empty API key (should still construct)
-    let agent3 = Agent::new(manifest.clone(), String::new(), None, None);
+    let agent3 = Agent::new(manifest.clone(), String::new(), None, None, None);
     assert_eq!(agent3.get_context("test"), None);
 
     // 3. Test with None window parameter
-    let agent4 = Agent::new(manifest.clone(), "test-key".to_string(), None, None);
+    let agent4 = Agent::new(manifest.clone(), "test-key".to_string(), None, None, None);
     assert_eq!(agent4.get_context("test"), None);
 
     // Validates: Agent::new parameter handling, API key acceptance, window parameter (None)

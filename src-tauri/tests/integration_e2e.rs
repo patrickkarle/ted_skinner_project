@@ -349,7 +349,7 @@ quality_gates: []
     let manifest = Manifest::load_from_file(file.path()).unwrap();
 
     // Test Agent helper methods (which expose RateLimiter and CircuitBreaker)
-    let _agent = Agent::new(manifest.clone(), api_key, None, None);
+    let _agent = Agent::new(manifest.clone(), api_key, None, None, None);
 
     // RateLimiter.available_tokens() is accessed via agent internals
     // CircuitBreaker.state() is accessed via agent internals

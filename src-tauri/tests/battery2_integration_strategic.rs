@@ -111,7 +111,7 @@ phases:
 
     /// Creates a test agent with the given manifest
     pub fn create_test_agent(manifest: Manifest) -> Agent {
-        Agent::new(manifest, "test-api-key".to_string(), None, None)
+        Agent::new(manifest, "test-api-key".to_string(), None, None, None)
     }
 }
 

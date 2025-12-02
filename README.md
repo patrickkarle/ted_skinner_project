@@ -1,143 +1,243 @@
-# Ted Skinner Project - FullIntel Agent
+# FullIntel Agent
 
-A sophisticated AI agent system built with Rust and Tauri, implementing advanced workflow orchestration, rate limiting, and circuit breaker patterns for reliable LLM integration.
+A desktop application for automated AI-powered research workflows. Execute multi-phase research protocols to generate comprehensive executive briefs on companies, industries, and emerging technologies.
 
-## Project Overview
+![Version](https://img.shields.io/badge/version-0.1.0-blue)
+![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey)
 
-This project implements a comprehensive agent-based system with:
-- **Multi-phase workflow execution** from YAML manifests
-- **Advanced protective mechanisms** (rate limiting, circuit breakers)
-- **Multi-LLM provider support** (Anthropic, Google, DeepSeek)
-- **Robust error handling** and graceful degradation
-- **Comprehensive test suite** (60 tests across 3 batteries)
+## Features
+
+- **Multi-Phase Research Workflows** - Execute structured research protocols with AI-powered analysis
+- **Real-Time Streaming** - Watch research results stream in as each phase completes
+- **Multiple Research Manifests** - Choose from 7 pre-configured research protocols
+- **Session Persistence** - Save and resume research sessions
+- **Project Organization** - Group related research sessions into projects
+- **Export Capabilities** - Export research results as Markdown
+- **Secure Authentication** - Local user accounts with encrypted password storage
+
+## Installation
+
+### Windows Installer
+
+1. Download `fullintel-agent_0.1.0_x64-setup.exe` from [Releases](../../releases)
+2. Run the installer and follow the wizard
+3. Launch "FullIntel Agent" from the Start Menu
+
+### Requirements
+
+- Windows 10/11 (64-bit)
+- [Anthropic API Key](https://console.anthropic.com) - Required for AI functionality
+
+## Quick Start
+
+1. **Create Account** - Set up a local user account on first launch
+2. **Configure API Key** - Go to Settings (gear icon) and enter your Anthropic API key
+3. **Select Manifest** - Choose a research protocol from the dropdown
+4. **Enter Topic** - Type a company name or research subject
+5. **Run Research** - Click "Run" and watch the results stream in
+
+## Research Manifests
+
+The application includes 7 pre-configured research protocols:
+
+| Manifest | Purpose |
+|----------|---------|
+| **Fullintel Process** | General company research and competitive analysis |
+| **Deep Dive Industry** | Comprehensive industry sector analysis |
+| **Frontier Tech** | Emerging technology and innovation research |
+| **Inductive Company** | Bottom-up company analysis from public signals |
+| **Intellectual Capital** | Talent mapping and human capital analysis |
+| **Value Chain** | Supply chain and value network analysis |
+| **Venture Momentum** | Startup and investment landscape research |
+
+### Manifest Structure
+
+Each manifest defines a multi-phase research workflow in YAML format:
+
+```yaml
+manifest:
+  id: "Protocol-ID"
+  version: "1.0.0"
+  name: "Protocol Name"
+  description: "What this protocol analyzes"
+
+phases:
+  - id: "PHASE-01"
+    name: "Phase Name"
+    instructions: |
+      Detailed instructions for the AI researcher...
+    output_schema: "SchemaName"
+
+  - id: "PHASE-02"
+    name: "Analysis Phase"
+    dependencies: ["PHASE-01"]
+    instructions: |
+      Build on previous phase results...
+
+quality_gates:
+  - phase: "PHASE-01"
+    check: "Validation criteria"
+    fail_action: "RETRY"
+```
+
+### Creating Custom Manifests
+
+You can create your own research protocols by:
+1. Creating a new `.yaml` file in the `manifests/` directory
+2. Following the manifest schema structure
+3. Defining phases with clear instructions
+4. Adding quality gates for validation
 
 ## Architecture
 
+### Technology Stack
+
+- **Frontend**: React 18 + TypeScript + Vite
+- **Backend**: Rust (Tauri v2)
+- **Database**: SQLite with rusqlite
+- **AI Integration**: Anthropic Claude API (streaming)
+- **Styling**: CSS with design tokens
+
+### Project Structure
+
 ```
-fullintel-agent/
-├── src/
-│   ├── lib.rs          # Library exports
-│   ├── main.rs         # Application entry point
-│   ├── agent.rs        # Agent and workflow orchestration (IM-2000-2019)
-│   ├── manifest.rs     # YAML manifest parsing (IM-2020-2029)
-│   └── llm.rs          # LLM client, rate limiting, circuit breakers (IM-3000-3037)
-└── tests/
-    ├── battery1_unit_strategic.rs        # 30 unit tests
-    ├── battery2_integration_strategic.rs # 20 integration tests
-    └── battery3_system_strategic.rs      # 10 system tests
+ted_skinner_project/
+├── src/                    # React frontend
+│   ├── App.tsx            # Main application component
+│   ├── App.css            # Application styles
+│   └── components/        # UI components
+├── src-tauri/             # Rust backend
+│   ├── src/
+│   │   ├── main.rs       # Tauri commands & app setup
+│   │   ├── agent.rs      # Research workflow engine
+│   │   ├── auth.rs       # Authentication & database
+│   │   ├── llm.rs        # LLM API integration
+│   │   └── manifest.rs   # Manifest parsing
+│   └── tauri.conf.json   # Tauri configuration
+├── manifests/             # Research protocol definitions
+│   ├── fullintel_process_manifest.yaml
+│   ├── Deep-Dive-Industry-Protocol.yaml
+│   ├── frontier-tech-protocol.yaml
+│   ├── Inductive-Company-Protocol.yaml
+│   ├── Intellectual-capital-protocol.yaml
+│   ├── value-chain-protocol.yaml
+│   └── venture-momentum-protocol.yaml
+└── docs/                  # Documentation
 ```
 
-## Component Manifest
+## Development
 
-### Core Components (126 total)
+### Prerequisites
 
-**Agent Module (IM-2000-2019):** 20 components
-- Agent, AgentState, PhaseStatus
-- Workflow execution, phase management, context handling
-- Error recovery and state transitions
+- [Node.js](https://nodejs.org/) 18+
+- [Rust](https://rustup.rs/) 1.70+
+- [Tauri CLI](https://tauri.app/)
 
-**Manifest Module (IM-2020-2029):** 10 components
-- Manifest, Phase, DataSchema, QualityGate
-- YAML parsing, validation, phase configuration
-
-**LLM Module (IM-3000-3037):** 38 components
-- LLMClient, LLMRequest, LLMResponse
-- RateLimiter (token bucket algorithm)
-- CircuitBreaker (failure protection)
-- Provider management (Anthropic, Google, DeepSeek)
-
-**Integration Points (IP-1000-1009):** 10 documented
-**Data Transformations (DT-1000-1009):** 10 documented
-**Error Handling Patterns (EH-1000-1009):** 10 documented
-**Test Infrastructure:** 28 test utilities
-
-## Testing Strategy
-
-### 3-Battery Test Suite (60 tests total)
-
-**Battery 1: Unit Tests (30 tests)**
-- Component isolation and validation
-- Pure function testing
-- State management verification
-
-**Battery 2: Integration Tests (20 tests)**
-- Component interaction validation
-- Data flow between modules
-- Error propagation and recovery
-
-**Battery 3: System Tests (10 tests)**
-- End-to-end workflow execution
-- Performance under stress
-- Multi-provider failover
-- Rate limiting and circuit breaking
-
-### Running Tests
+### Setup
 
 ```bash
-# All tests
-cargo test --all
+# Install dependencies
+npm install
 
-# Individual batteries
-cargo test --test battery1_unit_strategic
-cargo test --test battery2_integration_strategic
-cargo test --test battery3_system_strategic
+# Run in development mode
+npm run tauri dev
 
-# Specific test
-cargo test --test battery1_unit_strategic test_agent_initialization
-
-# With output
-cargo test -- --nocapture
+# Build for production
+npm run tauri build
 ```
 
-## Build & Development
+### Testing
 
 ```bash
-# Build
-cargo build --release
+# Run all Rust tests
+cd src-tauri && cargo test
 
-# Run
-cargo run
-
-# Lint
-cargo clippy --all-targets --all-features -- -D warnings
-
-# Format
-cargo fmt
+# Run specific test battery
+cargo test battery1  # Unit tests
+cargo test battery2  # Integration tests
+cargo test battery3  # System tests
 ```
 
-## CI/CD
+## Configuration
 
-GitHub Actions automatically runs:
-- All 3 test batteries
-- Clippy linting
-- Rustfmt formatting
+### API Key Setup
 
-On push/PR to main, master, or develop branches.
+1. Visit [console.anthropic.com](https://console.anthropic.com)
+2. Create an account and generate an API key
+3. In the app, click Settings (gear icon)
+4. Enter your API key and click Save
 
-## Dependencies
+### Model Selection
 
-- **Tauri 2.9**: Desktop application framework
-- **Tokio 1.48**: Async runtime
-- **Reqwest 0.12**: HTTP client
-- **Serde 1.0**: Serialization
-- **Serde_yaml 0.9**: YAML parsing
+Select from available Claude models in the dropdown:
+- **Claude Sonnet 4.5** (Recommended - balanced speed/quality)
+- **Claude Opus 4** (Highest quality, slower)
+- **Claude Haiku 3.5** (Fastest, lower cost)
 
-## License
+## Data Storage
 
-MIT (or your chosen license)
+All user data is stored locally on your machine:
 
-## Documentation
+| Data | Location |
+|------|----------|
+| User Database | `%APPDATA%\com.fullintel.agent\users.db` |
+| Configuration | `%APPDATA%\com.fullintel.agent\config.json` |
+| Research Sessions | Stored in SQLite database |
 
-See `docs/se-cpm/test-plans/` for:
-- Test specifications
-- Implementation details
-- Session handoff notes
-- Windows runtime analysis
+No data is sent to external servers except for the AI API calls to Anthropic.
 
-## Quality Metrics
+## Usage Guide
 
-- **Test Coverage:** 60/60 tests (100%)
-- **Components Validated:** 126 components
-- **Integration Points:** 10 documented
-- **Error Handling:** Comprehensive across all layers
-- **Performance:** Tested under sustained load (120 req/min)
+### Running Research
+
+1. Select a manifest from the dropdown (e.g., "Fullintel Process")
+2. Enter your research subject in the input field
+3. Click "Run" to start the workflow
+4. Watch as each phase executes and streams results
+5. View the complete brief when all phases finish
+
+### Managing Sessions
+
+- **View History** - Click sessions in the left sidebar
+- **Resume Session** - Click on any historical session to view
+- **Create Project** - Group related sessions into projects
+- **Export Results** - Copy or export the research output
+
+### Keyboard Shortcuts
+
+| Action | Shortcut |
+|--------|----------|
+| New Research | `Ctrl+N` |
+| Settings | `Ctrl+,` |
+| Export | `Ctrl+E` |
+
+## Troubleshooting
+
+### "API Key Invalid" Error
+- Verify your API key at [console.anthropic.com](https://console.anthropic.com)
+- Ensure the key has not expired
+- Check for extra spaces when pasting
+
+### App Won't Start
+- Ensure Windows 10/11 64-bit
+- Try running as Administrator
+- Check if WebView2 Runtime is installed
+
+### Research Hangs or Fails
+- Check your internet connection
+- Verify API key is valid and has credits
+- Check Anthropic API status at [status.anthropic.com](https://status.anthropic.com)
+- Try a different model (Haiku is most reliable)
+
+### Session Not Saving
+- Ensure you're logged in
+- Check disk space
+- Restart the application
+
+## Support
+
+For technical support, contact your administrator.
+
+---
+
+Built with [Tauri](https://tauri.app/) and [React](https://react.dev/)

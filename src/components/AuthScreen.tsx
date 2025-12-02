@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import "./AuthScreen.css";
+import fullintelLogoWide from "../assets/fullintel_logo_wide.jpg";
 
 interface UserInfo {
   id: number;
@@ -76,7 +77,7 @@ export function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
     <div className="auth-container">
       <div className="auth-card">
         <div className="auth-header">
-          <h1>Fullintel Agent</h1>
+          <img src={fullintelLogoWide} alt="FullIntel" className="auth-logo" />
           <p>AI-Powered Sales Intelligence</p>
         </div>
 
@@ -152,6 +153,22 @@ export function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
               ? "Sign In"
               : "Create Account"}
           </button>
+
+          {/* Mini color palette reference - matches main app */}
+          <div className="mini-palette">
+            <div className="mini-swatch" style={{ background: "var(--blue-25)" }}></div>
+            <div className="mini-swatch" style={{ background: "var(--blue-50)" }}></div>
+            <div className="mini-swatch" style={{ background: "var(--blue-100)" }}></div>
+            <div className="mini-swatch" style={{ background: "var(--blue-200)" }}></div>
+            <div className="mini-swatch" style={{ background: "var(--blue-300)" }}></div>
+            <div className="mini-swatch" style={{ background: "var(--blue-400)" }}></div>
+            <div className="mini-swatch" style={{ background: "var(--blue-500)" }}></div>
+            <div className="mini-swatch" style={{ background: "var(--blue-600)" }}></div>
+            <div className="mini-swatch" style={{ background: "var(--blue-700)" }}></div>
+            <div className="mini-swatch" style={{ background: "var(--blue-800)" }}></div>
+            <div className="mini-swatch" style={{ background: "var(--blue-900)" }}></div>
+            <div className="mini-swatch" style={{ background: "var(--blue-950)" }}></div>
+          </div>
         </form>
 
         <div className="auth-footer">

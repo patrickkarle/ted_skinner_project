@@ -51,3 +51,22 @@ WixTools/
 
 # OS
 Thumbs.db
+nul
+
+# Backup files
+*.bak.*
+*.old
+*.old.js
+*.old.ts
+
+# Session handoffs (dev notes)
+SESSION_HANDOFF*.md
+
+# Local delivery folder
+FullIntel-Agent-Delivery/
+
+# Generated output
+briefs-generated/
+
+# UI preview files
+ui-preview*.html

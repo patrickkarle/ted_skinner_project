@@ -1,0 +1,64 @@
+manifest:
+  id: "Frontier-Tech-Protocol"
+  version: "1.0.0"
+  name: "Unique Emerging Technology Scout"
+  description: "A rigorous filter for identifying, validating, and assessing the maturity of extremely unique or 'Deep Tech' innovations."
+
+schemas:
+  TechAnatomy:
+    fields:
+      - name: tech_name
+      - name: novelty_score
+        enum: [INCREMENTAL, DERIVATIVE, DISRUPTIVE, PARADIGM_SHIFT]
+      - name: underlying_science
+      - name: data_currency_timestamp
+        description: "Verified as of [TODAY'S DATE]."
+
+  HypeVsReality:
+    fields:
+      - name: claimed_capability
+      - name: proven_capability
+      - name: delta_risk
+        enum: [LOW_RISK, UNPROVEN_AT_SCALE, VAPORWARE_RISK]
+
+phases:
+  - id: "PHASE-01-DISCOVERY"
+    name: "Novelty Scan"
+    tools: ["search_tool", "patent_search"]
+    input: "tech_domain"
+    instructions: |
+      Scan for technologies in 'tech_domain' that appear in ACADEMIC or PATENT literature before marketing literature.
+      Recency Rule: Focus on breakthroughs published in [CURRENT_YEAR].
+      Filter: Discard "AI wrappers" or simple SaaS. Look for hardware or deep-code innovation.
+    output_schema: "TechAnatomy"
+
+  - id: "PHASE-02-REALITY"
+    name: "Physics & Feasibility Check"
+    dependencies: ["PHASE-01-DISCOVERY"]
+    logic_map:
+      VIOLATES_PHYSICS:
+        verdict: "IMPOSSIBLE"
+      LAB_ONLY:
+        verdict: "TRL_3_4"
+      PILOT_SUCCESS:
+        verdict: "TRL_6_7"
+    instructions: |
+      Test the claims against the Logic Map.
+      1. Does the whitepaper match the press release?
+      2. Identify the gap between 'Claimed' and 'Proven'.
+    output_schema: "HypeVsReality"
+
+  - id: "PHASE-03-SYNTHESIS"
+    name: "Frontier Tech Report"
+    dependencies: ["ALL"]
+    instructions: |
+      Synthesize:
+      1. **The Innovation:** Scientific explanation.
+      2. **The Reality:** Current TRL score.
+      3. **The Horizon:** Time to commercial viability.
+    output_target: "markdown_file"
+
+quality_gates:
+  - phase: "PHASE-01-DISCOVERY"
+    check: "Is the technology distinct from existing incumbents? (Must be novel)."
+    fail_action: "RETRY_SEARCH_FOR_NOVELTY"

@@ -23,6 +23,9 @@ pub struct ManifestHeader {
     pub version: String,
     pub name: String,
     pub description: String,
+    /// Optional label for the research subject input field (e.g., "industry or segment" instead of "company name")
+    #[serde(default)]
+    pub input_label: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
