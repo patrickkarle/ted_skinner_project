@@ -61,6 +61,19 @@ A powerful desktop application for AI-powered research workflows and intelligent
 
 ## Installation
 
+### Available Downloads
+
+All binaries are available on the [GitHub Releases](../../releases) page:
+
+| Platform | File | Type |
+|----------|------|------|
+| **Windows** | `fullintel-agent_0.1.0_x64-setup.exe` | NSIS installer (recommended) |
+| **Windows** | `fullintel-agent_0.1.0_x64_en-US.msi` | MSI installer (enterprise) |
+| **macOS Intel** | `fullintel-agent_0.1.0_x64.dmg` | Disk image |
+| **macOS Apple Silicon** | `fullintel-agent_0.1.0_aarch64.dmg` | Disk image (M1/M2/M3) |
+| **Linux** | `fullintel-agent_0.1.0_amd64.AppImage` | Universal (any distro) |
+| **Linux** | `fullintel-agent_0.1.0_amd64.deb` | Debian/Ubuntu package |
+
 ### Windows
 
 1. Download `fullintel-agent_0.1.0_x64-setup.exe` from [Releases](../../releases)
