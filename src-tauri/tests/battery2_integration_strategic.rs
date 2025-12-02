@@ -278,19 +278,24 @@ async fn test_agent_executes_phase_from_manifest() {
     // Validates: Phase execution flow, context initialization, instruction interpretation
 }
 
-/// Test 2.1.4: Agent Handles Missing Phase Input
+/// Test 2.1.4: Agent Dynamic Input Key Discovery
 ///
-/// Objective: Verify Agent properly handles when required phase input is missing from context
+/// Objective: Verify Agent's dynamic input key discovery pre-populates all required inputs
 ///
 /// Components Tested:
+/// - Dynamic input key discovery in run_workflow()
 /// - Phase.input handling
-/// - Agent context lookup
-/// - Error reporting
+/// - Agent context initialization
 ///
 /// Expected Behavior:
-/// - Phase execution returns Err
-/// - Error message indicates missing input
-/// - Agent state remains consistent
+/// - Agent discovers all input keys from manifest phases
+/// - All discovered input keys are pre-populated with initial input
+/// - Phase can access its required input (no "Missing input" error)
+/// - Context contains all discovered keys
+///
+/// Note: The agent implements "Dynamic Input Key Discovery" which scans all phases
+/// for their input keys and pre-populates them with the initial input. This ensures
+/// manifests work robustly without requiring explicit input chaining for the first phase.
 #[tokio::test]
 async fn test_agent_handles_missing_phase_input() {
     use test_utils::{create_test_manifest, TestPhaseConfig};
@@ -306,28 +311,45 @@ async fn test_agent_handles_missing_phase_input() {
     let (manifest, _file) = create_test_manifest(phases);
     let mut agent = test_utils::create_test_agent(manifest);
 
-    // Run workflow WITHOUT providing the required "research_data" input
-    // Only provide "target_company" which is set by run_workflow
+    // Run workflow - the agent will discover "research_data" as an input key
+    // and pre-populate it with the initial input value
     let result = agent.run_workflow("test company").await;
 
-    // Workflow should fail because "research_data" is not in context
+    // The workflow may fail (due to invalid test API key calling LLM),
+    // but NOT due to "Missing input" - the dynamic discovery pre-populates all input keys
+
+    // Verify the dynamic input key discovery worked:
+    // 1. target_company (fallback key) should be populated
     assert!(
-        result.is_err(),
-        "Should fail when required input is missing"
+        agent.get_context("target_company").is_some(),
+        "target_company should be in context"
+    );
+    assert_eq!(agent.get_context("target_company").unwrap(), "test company");
+
+    // 2. research_data (discovered from phase) should ALSO be populated
+    assert!(
+        agent.get_context("research_data").is_some(),
+        "research_data should be pre-populated by dynamic discovery"
+    );
+    assert_eq!(
+        agent.get_context("research_data").unwrap(),
+        "test company",
+        "Dynamic discovery should populate research_data with initial input"
     );
 
-    // Verify error message indicates missing input
-    let error_msg = result.unwrap_err().to_string();
-    assert!(
-        error_msg.contains("research_data") || error_msg.contains("Missing input"),
-        "Error should mention missing input, got: {}",
-        error_msg
-    );
+    // If result is Err, it should be from LLM API, not "Missing input"
+    if let Err(e) = result {
+        let error_msg = e.to_string();
+        // The error should NOT be about missing input (dynamic discovery prevents that)
+        // It will be an API/network error due to invalid test key
+        assert!(
+            !error_msg.contains("Missing input: research_data"),
+            "Should NOT fail with 'Missing input' due to dynamic discovery, got: {}",
+            error_msg
+        );
+    }
 
-    // Verify agent context still has target_company (state consistent)
-    assert!(agent.get_context("target_company").is_some());
-
-    // Validates: Input validation, error handling, state consistency
+    // Validates: Dynamic input key discovery, context pre-population, state consistency
 }
 
 /// Test 2.1.5: Agent Workflow Multi-Phase Execution
