@@ -1270,7 +1270,13 @@ quality_gates: []
     let agent1 = Agent::new(manifest.clone(), "key-1".to_string(), None, None, None);
     assert_eq!(agent1.get_context("test"), None);
 
-    let agent2 = Agent::new(manifest.clone(), "different-key-2".to_string(), None, None, None);
+    let agent2 = Agent::new(
+        manifest.clone(),
+        "different-key-2".to_string(),
+        None,
+        None,
+        None,
+    );
     assert_eq!(agent2.get_context("test"), None);
 
     // 2. Test with empty API key (should still construct)

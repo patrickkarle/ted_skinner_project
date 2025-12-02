@@ -78,9 +78,9 @@ pub enum MultiTurnError {
 /// Maps to provider-specific role strings via to_provider_string()
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ChatRole {
-    System,     // System instructions (some providers)
-    User,       // User messages
-    Assistant,  // AI responses (maps to "model" for Gemini)
+    System,    // System instructions (some providers)
+    User,      // User messages
+    Assistant, // AI responses (maps to "model" for Gemini)
 }
 
 impl ChatRole {
@@ -99,8 +99,8 @@ impl ChatRole {
 /// IM-4001: ChatMessage - Individual conversation message
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
-    pub role: ChatRole,   // IM-4001-F1: Semantic role (abstracted)
-    pub content: String,  // IM-4001-F2: Message content
+    pub role: ChatRole,  // IM-4001-F1: Semantic role (abstracted)
+    pub content: String, // IM-4001-F2: Message content
 }
 
 impl ChatMessage {
@@ -131,8 +131,8 @@ impl ChatMessage {
 /// IM-4005: CacheTTL - Cache duration options (Anthropic-specific)
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum CacheTTL {
-    FiveMinutes,  // Default, lower write cost
-    OneHour,      // Extended, higher write cost (2x)
+    FiveMinutes, // Default, lower write cost
+    OneHour,     // Extended, higher write cost (2x)
 }
 
 impl CacheTTL {
@@ -148,7 +148,7 @@ impl CacheTTL {
 /// IM-4004: CacheConfig - Caching configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CacheConfig {
-    pub ttl: CacheTTL,  // IM-4004-F1: Time to live
+    pub ttl: CacheTTL, // IM-4004-F1: Time to live
 }
 
 impl Default for CacheConfig {
@@ -162,10 +162,10 @@ impl Default for CacheConfig {
 /// IM-4003: MultiTurnRequest - Full conversation request
 #[derive(Debug, Clone, Serialize)]
 pub struct MultiTurnRequest {
-    pub system: Option<String>,       // IM-4003-F1: Optional system prompt
-    pub messages: Vec<ChatMessage>,   // IM-4003-F2: Conversation history
-    pub model: String,                // IM-4003-F3: Model identifier
-    pub enable_caching: bool,         // IM-4003-F4: Enable provider caching
+    pub system: Option<String>,     // IM-4003-F1: Optional system prompt
+    pub messages: Vec<ChatMessage>, // IM-4003-F2: Conversation history
+    pub model: String,              // IM-4003-F3: Model identifier
+    pub enable_caching: bool,       // IM-4003-F4: Enable provider caching
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cache_config: Option<CacheConfig>, // IM-4003-F5: Cache configuration
 }
@@ -823,7 +823,10 @@ impl LLMClient {
             self.generate_gemini(req).await
         } else if req.model.starts_with("deepseek") {
             self.generate_deepseek(req).await
-        } else if req.model.starts_with("gpt") || req.model.starts_with("o1") || req.model.starts_with("o3") {
+        } else if req.model.starts_with("gpt")
+            || req.model.starts_with("o1")
+            || req.model.starts_with("o3")
+        {
             self.generate_openai(req).await
         } else {
             Err(anyhow!("Unsupported model: {}", req.model))
@@ -868,7 +871,10 @@ impl LLMClient {
             self.generate_gemini_stream(request).await
         } else if request.model.starts_with("deepseek") {
             self.generate_deepseek_stream(request).await
-        } else if request.model.starts_with("gpt") || request.model.starts_with("o1") || request.model.starts_with("o3") {
+        } else if request.model.starts_with("gpt")
+            || request.model.starts_with("o1")
+            || request.model.starts_with("o3")
+        {
             self.generate_openai_stream(request).await
         } else {
             Err(anyhow!(
@@ -1423,7 +1429,11 @@ impl LLMClient {
         } else {
             &self.api_key
         };
-        println!("[DEBUG] Anthropic request with key prefix: {}... (len={})", key_prefix, self.api_key.len());
+        println!(
+            "[DEBUG] Anthropic request with key prefix: {}... (len={})",
+            key_prefix,
+            self.api_key.len()
+        );
 
         // Validate key format
         if !self.api_key.starts_with("sk-ant-") {
@@ -1568,7 +1578,8 @@ impl LLMClient {
             Ok(result)
         } else {
             // For non-reasoning models (deepseek-chat), just return content
-            message.content
+            message
+                .content
                 .clone()
                 .ok_or_else(|| anyhow!("No content in DeepSeek response"))
         }
@@ -1583,11 +1594,18 @@ impl LLMClient {
         } else {
             &self.api_key
         };
-        println!("[DEBUG] OpenAI request with key prefix: {}... (len={})", key_prefix, self.api_key.len());
+        println!(
+            "[DEBUG] OpenAI request with key prefix: {}... (len={})",
+            key_prefix,
+            self.api_key.len()
+        );
 
         // Validate key format
         if !self.api_key.starts_with("sk-") {
-            return Err(anyhow!("Invalid OpenAI API key format. Key should start with 'sk-'. Got prefix: '{}'", key_prefix));
+            return Err(anyhow!(
+                "Invalid OpenAI API key format. Key should start with 'sk-'. Got prefix: '{}'",
+                key_prefix
+            ));
         }
 
         let body = serde_json::json!({
@@ -1711,7 +1729,10 @@ impl LLMClient {
             req.model, self.api_key
         );
 
-        println!("[DEBUG] Gemini stream URL: {}", url.replace(&self.api_key, "***KEY***"));
+        println!(
+            "[DEBUG] Gemini stream URL: {}",
+            url.replace(&self.api_key, "***KEY***")
+        );
 
         let body = serde_json::json!({
             "contents": [{
@@ -1751,7 +1772,8 @@ impl LLMClient {
                     for line in text.lines() {
                         // Skip empty lines and array brackets
                         let trimmed = line.trim();
-                        if trimmed.is_empty() || trimmed == "[" || trimmed == "]" || trimmed == "," {
+                        if trimmed.is_empty() || trimmed == "[" || trimmed == "]" || trimmed == ","
+                        {
                             continue;
                         }
 
@@ -1769,12 +1791,18 @@ impl LLMClient {
                         if let Ok(response) = serde_json::from_str::<GeminiResponse>(json_str) {
                             if let Some(candidate) = response.candidates.first() {
                                 if let Some(part) = candidate.content.parts.first() {
-                                    println!("[DEBUG] Gemini extracted text: {}...", &part.text[..part.text.len().min(50)]);
+                                    println!(
+                                        "[DEBUG] Gemini extracted text: {}...",
+                                        &part.text[..part.text.len().min(50)]
+                                    );
                                     return Some(Ok(part.text.clone()));
                                 }
                             }
                         } else {
-                            println!("[DEBUG] Failed to parse Gemini JSON: {}", &json_str[..json_str.len().min(100)]);
+                            println!(
+                                "[DEBUG] Failed to parse Gemini JSON: {}",
+                                &json_str[..json_str.len().min(100)]
+                            );
                         }
                     }
                     None
@@ -1852,7 +1880,8 @@ impl LLMClient {
                                     if let Some(choice) = chunk_data.choices.first() {
                                         // For R1 models, stream reasoning_content first
                                         if is_r1 {
-                                            if let Some(reasoning) = &choice.delta.reasoning_content {
+                                            if let Some(reasoning) = &choice.delta.reasoning_content
+                                            {
                                                 if !reasoning.is_empty() {
                                                     result_tokens.push(reasoning.clone());
                                                 }
@@ -1863,8 +1892,14 @@ impl LLMClient {
                                         if let Some(content) = &choice.delta.content {
                                             if !content.is_empty() {
                                                 // For R1, add separator when transitioning from reasoning to content
-                                                if is_r1 && !started_content.load(std::sync::atomic::Ordering::Relaxed) {
-                                                    started_content.store(true, std::sync::atomic::Ordering::Relaxed);
+                                                if is_r1
+                                                    && !started_content
+                                                        .load(std::sync::atomic::Ordering::Relaxed)
+                                                {
+                                                    started_content.store(
+                                                        true,
+                                                        std::sync::atomic::Ordering::Relaxed,
+                                                    );
                                                     result_tokens.push("\n\n---\n\n".to_string());
                                                 }
                                                 result_tokens.push(content.clone());
@@ -2812,7 +2847,10 @@ mod tests {
         let body = to_anthropic_body(&req);
 
         // System should have cache_control
-        assert!(body["system"].is_array(), "System should be array with cache_control");
+        assert!(
+            body["system"].is_array(),
+            "System should be array with cache_control"
+        );
         assert!(body["system"][0]["cache_control"].is_object());
 
         // User message should have cache_control in content block
@@ -2852,12 +2890,21 @@ mod tests {
         let body = to_gemini_body(&req);
 
         // Must use "contents" not "messages"
-        assert!(body["contents"].is_array(), "Gemini must use 'contents' not 'messages'");
-        assert!(body["messages"].is_null(), "Gemini must not have 'messages'");
+        assert!(
+            body["contents"].is_array(),
+            "Gemini must use 'contents' not 'messages'"
+        );
+        assert!(
+            body["messages"].is_null(),
+            "Gemini must not have 'messages'"
+        );
 
         // Each content must use "parts" array
         let contents = body["contents"].as_array().unwrap();
-        assert!(contents[0]["parts"].is_array(), "Gemini must use 'parts' array");
+        assert!(
+            contents[0]["parts"].is_array(),
+            "Gemini must use 'parts' array"
+        );
         assert!(contents[0]["parts"][0]["text"].is_string());
     }
 
@@ -2892,7 +2939,10 @@ mod tests {
             "Gemini must use 'systemInstruction' for system prompt"
         );
         assert!(body["systemInstruction"]["parts"].is_array());
-        assert_eq!(body["systemInstruction"]["parts"][0]["text"], "You are helpful");
+        assert_eq!(
+            body["systemInstruction"]["parts"][0]["text"],
+            "You are helpful"
+        );
     }
 
     #[test]

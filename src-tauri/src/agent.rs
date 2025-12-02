@@ -35,9 +35,9 @@ struct PhaseOutputPayload {
     session_id: Option<i64>,
     phase_id: String,
     phase_name: String,
-    status: String, // "running", "completed", "failed"
-    system_prompt: Option<String>,  // IM-5001: System prompt sent to LLM
-    user_input: Option<String>,     // IM-5002: User input/manifest data sent to LLM
+    status: String,                // "running", "completed", "failed"
+    system_prompt: Option<String>, // IM-5001: System prompt sent to LLM
+    user_input: Option<String>,    // IM-5002: User input/manifest data sent to LLM
     output: Option<String>,
     error: Option<String>,
 }
@@ -84,7 +84,7 @@ pub struct Agent {
     llm_client: LLMClient,
     app_handle: Option<AppHandle>, // AppHandle for global event emission (Tauri 2.0)
     model_override: Option<String>, // UI-selected model override
-    session_id: Option<i64>, // Research session ID for persistence
+    session_id: Option<i64>,       // Research session ID for persistence
 }
 
 impl Agent {
@@ -119,7 +119,8 @@ impl Agent {
         // This ensures compatibility with ANY manifest format without code changes.
 
         // Step 1: Collect all unique input keys from phases
-        let mut discovered_keys: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut discovered_keys: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
         for phase in &self.manifest.phases {
             if let Some(input_key) = &phase.input {
                 discovered_keys.insert(input_key.clone());
@@ -139,7 +140,11 @@ impl Agent {
                 .insert(key.clone(), initial_input.to_string());
         }
 
-        self.log(&format!("📋 Populated {} input keys: {:?}", discovered_keys.len(), discovered_keys));
+        self.log(&format!(
+            "📋 Populated {} input keys: {:?}",
+            discovered_keys.len(),
+            discovered_keys
+        ));
 
         let phases = self.manifest.phases.clone();
 
@@ -159,7 +164,15 @@ impl Agent {
 
                     // Emit phase-output event with completed status and output for persistence
                     // Note: prompts already emitted with "running" status; here we just add output
-                    self.emit_phase_output(&phase.id, &phase.name, "completed", None, None, Some(&output), None);
+                    self.emit_phase_output(
+                        &phase.id,
+                        &phase.name,
+                        "completed",
+                        None,
+                        None,
+                        Some(&output),
+                        None,
+                    );
 
                     // Store to specific target/schema for inter-phase dependencies
                     if let Some(target) = &phase.output_target {
@@ -181,7 +194,15 @@ impl Agent {
 
                     // Emit phase-output event with failed status and error for persistence
                     // Note: prompts already emitted with "running" status; here we just add error
-                    self.emit_phase_output(&phase.id, &phase.name, "failed", None, None, None, Some(&e.to_string()));
+                    self.emit_phase_output(
+                        &phase.id,
+                        &phase.name,
+                        "failed",
+                        None,
+                        None,
+                        None,
+                        Some(&e.to_string()),
+                    );
 
                     return Err(e);
                 }
@@ -190,7 +211,9 @@ impl Agent {
 
         // Store the cumulative report as markdown_file for the final output
         // This ensures get_context("markdown_file") returns ALL phase outputs
-        self.state.context.insert("markdown_file".to_string(), cumulative_report);
+        self.state
+            .context
+            .insert("markdown_file".to_string(), cumulative_report);
 
         Ok(())
     }
@@ -209,17 +232,23 @@ impl Agent {
         error: Option<&str>,
     ) {
         if let Some(app) = &self.app_handle {
-            match app.emit("phase-output", PhaseOutputPayload {
-                session_id: self.session_id,
-                phase_id: phase_id.to_string(),
-                phase_name: phase_name.to_string(),
-                status: status.to_string(),
-                system_prompt: system_prompt.map(|s| s.to_string()),
-                user_input: user_input.map(|s| s.to_string()),
-                output: output.map(|s| s.to_string()),
-                error: error.map(|s| s.to_string()),
-            }) {
-                Ok(_) => println!("[AGENT-EMIT] ✓ Phase output: {} -> {} (session: {:?})", phase_id, status, self.session_id),
+            match app.emit(
+                "phase-output",
+                PhaseOutputPayload {
+                    session_id: self.session_id,
+                    phase_id: phase_id.to_string(),
+                    phase_name: phase_name.to_string(),
+                    status: status.to_string(),
+                    system_prompt: system_prompt.map(|s| s.to_string()),
+                    user_input: user_input.map(|s| s.to_string()),
+                    output: output.map(|s| s.to_string()),
+                    error: error.map(|s| s.to_string()),
+                },
+            ) {
+                Ok(_) => println!(
+                    "[AGENT-EMIT] ✓ Phase output: {} -> {} (session: {:?})",
+                    phase_id, status, self.session_id
+                ),
                 Err(e) => eprintln!("[AGENT-EMIT-ERROR] Failed to emit phase-output: {}", e),
             }
         }
@@ -227,7 +256,9 @@ impl Agent {
 
     async fn execute_phase(&mut self, phase: &Phase) -> Result<String> {
         // Use UI-selected model override, then phase config, then default to Claude
-        let model = self.model_override.as_deref()
+        let model = self
+            .model_override
+            .as_deref()
             .or(phase.model.as_deref())
             .unwrap_or("claude-sonnet-4-5-20250929");
 
@@ -259,7 +290,11 @@ impl Agent {
             model: model.to_string(),
         };
 
-        self.log(&format!("📨 REQUEST: {} chars prompt, {} chars input", system_prompt.len(), input_data.len()));
+        self.log(&format!(
+            "📨 REQUEST: {} chars prompt, {} chars input",
+            system_prompt.len(),
+            input_data.len()
+        ));
 
         // IM-5003: Emit "running" event WITH prompts for user data accessibility
         // This captures the system prompt and user input for later viewing/resume
@@ -292,10 +327,13 @@ impl Agent {
 
                             // Emit streaming token to frontend via AppHandle (global event)
                             if let Some(app) = &self.app_handle {
-                                let _ = app.emit("stream-token", StreamTokenPayload {
-                                    token: token.clone(),
-                                    phase_id: phase.id.clone(),
-                                });
+                                let _ = app.emit(
+                                    "stream-token",
+                                    StreamTokenPayload {
+                                        token: token.clone(),
+                                        phase_id: phase.id.clone(),
+                                    },
+                                );
                             }
 
                             // Log progress every 50 tokens
@@ -311,13 +349,20 @@ impl Agent {
                 }
 
                 let elapsed = start.elapsed();
-                self.log(&format!("📥 COMPLETE: {} tokens, {} chars in {:.1}s",
-                    token_count, full_response.len(), elapsed.as_secs_f64()));
+                self.log(&format!(
+                    "📥 COMPLETE: {} tokens, {} chars in {:.1}s",
+                    token_count,
+                    full_response.len(),
+                    elapsed.as_secs_f64()
+                ));
                 Ok(full_response)
             }
             Err(stream_err) => {
                 // Fallback to non-streaming
-                self.log(&format!("⚠️ Streaming unavailable ({}), using standard request...", stream_err));
+                self.log(&format!(
+                    "⚠️ Streaming unavailable ({}), using standard request...",
+                    stream_err
+                ));
                 self.log("⏳ WAITING for response...");
 
                 let result = self.llm_client.generate(req).await;
@@ -325,10 +370,18 @@ impl Agent {
 
                 match &result {
                     Ok(response) => {
-                        self.log(&format!("📥 RECEIVED: {} chars in {:.1}s", response.len(), elapsed.as_secs_f64()));
+                        self.log(&format!(
+                            "📥 RECEIVED: {} chars in {:.1}s",
+                            response.len(),
+                            elapsed.as_secs_f64()
+                        ));
                     }
                     Err(e) => {
-                        self.log(&format!("❌ ERROR after {:.1}s: {}", elapsed.as_secs_f64(), e));
+                        self.log(&format!(
+                            "❌ ERROR after {:.1}s: {}",
+                            elapsed.as_secs_f64(),
+                            e
+                        ));
                     }
                 }
                 result
@@ -342,9 +395,12 @@ impl Agent {
     fn log(&self, msg: &str) {
         println!("[AGENT] {}", msg);
         if let Some(app) = &self.app_handle {
-            match app.emit("agent-log", LogPayload {
-                message: msg.to_string(),
-            }) {
+            match app.emit(
+                "agent-log",
+                LogPayload {
+                    message: msg.to_string(),
+                },
+            ) {
                 Ok(_) => println!("[AGENT-EMIT] ✓ Sent: {}", &msg[..msg.len().min(50)]),
                 Err(e) => eprintln!("[AGENT-EMIT-ERROR] Failed to emit log: {}", e),
             }
@@ -367,10 +423,13 @@ impl Agent {
         };
 
         if let Some(app) = &self.app_handle {
-            match app.emit("phase-update", PhaseUpdatePayload {
-                phase_id: phase_id.to_string(),
-                status: status_str.to_string(),
-            }) {
+            match app.emit(
+                "phase-update",
+                PhaseUpdatePayload {
+                    phase_id: phase_id.to_string(),
+                    status: status_str.to_string(),
+                },
+            ) {
                 Ok(_) => println!("[AGENT-EMIT] ✓ Phase {} -> {}", phase_id, status_str),
                 Err(e) => eprintln!("[AGENT-EMIT-ERROR] Failed to emit phase-update: {}", e),
             }

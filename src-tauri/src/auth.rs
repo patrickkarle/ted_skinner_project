@@ -76,7 +76,7 @@ pub struct UserProfile {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiKeyEntry {
     pub provider: String,
-    pub has_key: bool,  // Don't expose actual key, just presence
+    pub has_key: bool, // Don't expose actual key, just presence
 }
 
 /// Full brief with content
@@ -106,7 +106,7 @@ pub struct BriefSummary {
 pub struct ConversationMessage {
     pub id: i64,
     pub brief_id: i64,
-    pub role: String,  // "user" or "assistant"
+    pub role: String, // "user" or "assistant"
     pub content: String,
     pub created_at: String,
 }
@@ -174,9 +174,9 @@ pub struct PhaseOutput {
     pub session_id: i64,
     pub phase_id: String,
     pub phase_name: String,
-    pub status: String, // "running", "completed", "failed"
-    pub system_prompt: Option<String>,  // IM-5001: System prompt sent to LLM
-    pub user_input: Option<String>,     // IM-5002: User input/manifest data sent to LLM
+    pub status: String,                // "running", "completed", "failed"
+    pub system_prompt: Option<String>, // IM-5001: System prompt sent to LLM
+    pub user_input: Option<String>,    // IM-5002: User input/manifest data sent to LLM
     pub output: Option<String>,
     pub error: Option<String>,
     pub created_at: String,
@@ -190,7 +190,7 @@ pub struct SessionMessage {
     pub id: i64,
     pub session_id: i64,
     pub phase_id: Option<String>,
-    pub role: String,  // "user", "assistant", "system"
+    pub role: String, // "user", "assistant", "system"
     pub content: String,
     pub created_at: String,
 }
@@ -215,7 +215,7 @@ pub struct SessionContext {
 /// Session history message (simplified for serialization to frontend)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionHistoryMessage {
-    pub role: String,  // "user" or "assistant"
+    pub role: String, // "user" or "assistant"
     pub content: String,
 }
 
@@ -494,19 +494,24 @@ impl AuthManager {
         }
 
         // Check if the table has the old schema by looking for 'in_progress' in the CHECK constraint
-        let sql: String = self.conn.query_row(
-            "SELECT sql FROM sqlite_master WHERE type='table' AND name='research_sessions'",
-            [],
-            |row| row.get(0),
-        ).unwrap_or_default();
+        let sql: String = self
+            .conn
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='research_sessions'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or_default();
 
         if sql.contains("in_progress") {
             println!("[AUTH] Migrating research_sessions schema: 'in_progress' -> 'running'");
 
             // Drop the old table and let init_database create the new one
             // Note: This loses any existing session data, but the feature is new
-            self.conn.execute("DROP TABLE IF EXISTS phase_outputs", [])?;
-            self.conn.execute("DROP TABLE IF EXISTS research_sessions", [])?;
+            self.conn
+                .execute("DROP TABLE IF EXISTS phase_outputs", [])?;
+            self.conn
+                .execute("DROP TABLE IF EXISTS research_sessions", [])?;
 
             println!("[AUTH] Migration complete: research_sessions table recreated with 'running' status");
         }
@@ -518,11 +523,14 @@ impl AuthManager {
     /// SQLite supports ALTER TABLE ADD COLUMN, so we can add columns one by one
     fn migrate_users_profile_fields(&mut self) -> Result<(), AuthError> {
         // Check if table exists
-        let table_exists: bool = self.conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='users')",
-            [],
-            |row| row.get(0),
-        ).unwrap_or(false);
+        let table_exists: bool = self
+            .conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='users')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
 
         if !table_exists {
             // Table doesn't exist yet, no migration needed (init_database will create it)
@@ -530,22 +538,30 @@ impl AuthManager {
         }
 
         // Check if first_name column exists by trying to query it
-        let has_first_name = self.conn.query_row(
-            "SELECT first_name FROM users LIMIT 1",
-            [],
-            |_row| Ok(()),
-        );
+        let has_first_name =
+            self.conn
+                .query_row("SELECT first_name FROM users LIMIT 1", [], |_row| Ok(()));
 
         if has_first_name.is_err() {
             println!("[AUTH] Migrating users table: adding profile fields");
 
             // Add profile columns one at a time
-            let _ = self.conn.execute("ALTER TABLE users ADD COLUMN first_name TEXT", []);
-            let _ = self.conn.execute("ALTER TABLE users ADD COLUMN last_name TEXT", []);
-            let _ = self.conn.execute("ALTER TABLE users ADD COLUMN role TEXT", []);
-            let _ = self.conn.execute("ALTER TABLE users ADD COLUMN location TEXT", []);
+            let _ = self
+                .conn
+                .execute("ALTER TABLE users ADD COLUMN first_name TEXT", []);
+            let _ = self
+                .conn
+                .execute("ALTER TABLE users ADD COLUMN last_name TEXT", []);
+            let _ = self
+                .conn
+                .execute("ALTER TABLE users ADD COLUMN role TEXT", []);
+            let _ = self
+                .conn
+                .execute("ALTER TABLE users ADD COLUMN location TEXT", []);
 
-            println!("[AUTH] Migration complete: added first_name, last_name, role, location columns");
+            println!(
+                "[AUTH] Migration complete: added first_name, last_name, role, location columns"
+            );
         }
 
         Ok(())
@@ -575,11 +591,18 @@ impl AuthManager {
         );
 
         if has_system_prompt.is_err() {
-            println!("[AUTH] Migrating phase_outputs table: adding prompt fields (IM-5001, IM-5002)");
+            println!(
+                "[AUTH] Migrating phase_outputs table: adding prompt fields (IM-5001, IM-5002)"
+            );
 
             // Add prompt columns using idempotent pattern (let _ = ignores "column exists" errors)
-            let _ = self.conn.execute("ALTER TABLE phase_outputs ADD COLUMN system_prompt TEXT", []);
-            let _ = self.conn.execute("ALTER TABLE phase_outputs ADD COLUMN user_input TEXT", []);
+            let _ = self.conn.execute(
+                "ALTER TABLE phase_outputs ADD COLUMN system_prompt TEXT",
+                [],
+            );
+            let _ = self
+                .conn
+                .execute("ALTER TABLE phase_outputs ADD COLUMN user_input TEXT", []);
 
             println!("[AUTH] Migration complete: added system_prompt, user_input columns to phase_outputs");
         }
@@ -591,23 +614,27 @@ impl AuthManager {
     /// Uses idempotent ALTER TABLE ADD COLUMN pattern (safe to run multiple times)
     fn migrate_archive_columns(&mut self) -> Result<(), AuthError> {
         // Check if projects table exists
-        let projects_exists: bool = self.conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='projects')",
-            [],
-            |row| row.get(0),
-        ).unwrap_or(false);
+        let projects_exists: bool = self
+            .conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='projects')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
 
         if projects_exists {
             // Check if archived column exists in projects by trying to query it
-            let has_archived = self.conn.query_row(
-                "SELECT archived FROM projects LIMIT 1",
-                [],
-                |_row| Ok(()),
-            );
+            let has_archived =
+                self.conn
+                    .query_row("SELECT archived FROM projects LIMIT 1", [], |_row| Ok(()));
 
             if has_archived.is_err() {
                 println!("[AUTH] Migrating projects table: adding archived column");
-                let _ = self.conn.execute("ALTER TABLE projects ADD COLUMN archived INTEGER DEFAULT 0", []);
+                let _ = self.conn.execute(
+                    "ALTER TABLE projects ADD COLUMN archived INTEGER DEFAULT 0",
+                    [],
+                );
                 println!("[AUTH] Migration complete: added archived column to projects");
             }
         }
@@ -629,7 +656,10 @@ impl AuthManager {
 
             if has_archived.is_err() {
                 println!("[AUTH] Migrating research_sessions table: adding archived column");
-                let _ = self.conn.execute("ALTER TABLE research_sessions ADD COLUMN archived INTEGER DEFAULT 0", []);
+                let _ = self.conn.execute(
+                    "ALTER TABLE research_sessions ADD COLUMN archived INTEGER DEFAULT 0",
+                    [],
+                );
                 println!("[AUTH] Migration complete: added archived column to research_sessions");
             }
         }
@@ -698,8 +728,8 @@ impl AuthManager {
         ).map_err(|_| AuthError::InvalidCredentials)?;
 
         // Verify password
-        let parsed_hash = PasswordHash::new(&stored_hash)
-            .map_err(|e| AuthError::PasswordHash(e.to_string()))?;
+        let parsed_hash =
+            PasswordHash::new(&stored_hash).map_err(|e| AuthError::PasswordHash(e.to_string()))?;
 
         Argon2::default()
             .verify_password(password.as_bytes(), &parsed_hash)
@@ -764,7 +794,13 @@ impl AuthManager {
             SET first_name = ?1, last_name = ?2, role = ?3, location = ?4
             WHERE id = ?5
             "#,
-            params![profile.first_name, profile.last_name, profile.role, profile.location, user_id],
+            params![
+                profile.first_name,
+                profile.last_name,
+                profile.role,
+                profile.location,
+                user_id
+            ],
         )?;
 
         // Update the cached current user
@@ -847,9 +883,9 @@ impl AuthManager {
     pub fn list_api_keys(&self) -> Result<Vec<ApiKeyEntry>, AuthError> {
         let user = self.current_user.as_ref().ok_or(AuthError::NotLoggedIn)?;
 
-        let mut stmt = self.conn.prepare(
-            "SELECT provider FROM api_keys WHERE user_id = ?1"
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT provider FROM api_keys WHERE user_id = ?1")?;
 
         let providers: Vec<String> = stmt
             .query_map(params![user.id], |row| row.get(0))?
@@ -1116,7 +1152,10 @@ impl AuthManager {
     }
 
     /// Get a specific custom provider by ID
-    pub fn get_custom_provider(&self, provider_id: i64) -> Result<Option<CustomProvider>, AuthError> {
+    pub fn get_custom_provider(
+        &self,
+        provider_id: i64,
+    ) -> Result<Option<CustomProvider>, AuthError> {
         let user = self.current_user.as_ref().ok_or(AuthError::NotLoggedIn)?;
 
         let result = self.conn.query_row(
@@ -1148,7 +1187,10 @@ impl AuthManager {
     }
 
     /// Get a custom provider by provider_key
-    pub fn get_custom_provider_by_key(&self, provider_key: &str) -> Result<Option<CustomProvider>, AuthError> {
+    pub fn get_custom_provider_by_key(
+        &self,
+        provider_key: &str,
+    ) -> Result<Option<CustomProvider>, AuthError> {
         let user = self.current_user.as_ref().ok_or(AuthError::NotLoggedIn)?;
 
         let result = self.conn.query_row(
@@ -1184,11 +1226,14 @@ impl AuthManager {
         let user = self.current_user.as_ref().ok_or(AuthError::NotLoggedIn)?;
 
         // First get the provider_key to delete associated API key
-        let provider_key: Option<String> = self.conn.query_row(
-            "SELECT provider_key FROM custom_providers WHERE id = ?1 AND user_id = ?2",
-            params![provider_id, user.id],
-            |row| row.get(0),
-        ).ok();
+        let provider_key: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT provider_key FROM custom_providers WHERE id = ?1 AND user_id = ?2",
+                params![provider_id, user.id],
+                |row| row.get(0),
+            )
+            .ok();
 
         // Delete the API key if it exists
         if let Some(key) = &provider_key {
@@ -1349,7 +1394,10 @@ impl AuthManager {
     }
 
     /// Get a specific research session by ID
-    pub fn get_research_session(&self, session_id: i64) -> Result<Option<ResearchSession>, AuthError> {
+    pub fn get_research_session(
+        &self,
+        session_id: i64,
+    ) -> Result<Option<ResearchSession>, AuthError> {
         let user = self.current_user.as_ref().ok_or(AuthError::NotLoggedIn)?;
 
         let result = self.conn.query_row(
@@ -1394,7 +1442,11 @@ impl AuthManager {
     }
 
     /// Rename a research session (update the company field which serves as the name)
-    pub fn rename_research_session(&self, session_id: i64, new_name: &str) -> Result<(), AuthError> {
+    pub fn rename_research_session(
+        &self,
+        session_id: i64,
+        new_name: &str,
+    ) -> Result<(), AuthError> {
         let user = self.current_user.as_ref().ok_or(AuthError::NotLoggedIn)?;
 
         self.conn.execute(
@@ -1522,7 +1574,10 @@ impl AuthManager {
     }
 
     /// Get the last completed phase output for a session (for resumption)
-    pub fn get_last_completed_phase(&self, session_id: i64) -> Result<Option<PhaseOutput>, AuthError> {
+    pub fn get_last_completed_phase(
+        &self,
+        session_id: i64,
+    ) -> Result<Option<PhaseOutput>, AuthError> {
         let user = self.current_user.as_ref().ok_or(AuthError::NotLoggedIn)?;
 
         // Verify the session belongs to the current user
@@ -1707,20 +1762,20 @@ impl AuthManager {
 
         // Use Argon2 for key derivation
         argon2::Argon2::default()
-            .hash_password_into(
-                password.as_bytes(),
-                salt.as_bytes(),
-                &mut output,
-            )
+            .hash_password_into(password.as_bytes(), salt.as_bytes(), &mut output)
             .expect("Key derivation failed");
 
         output
     }
 
     /// Encrypt an API key using AES-256-GCM
-    fn encrypt_api_key(&self, api_key: &str, key: &[u8; 32]) -> Result<(Vec<u8>, [u8; 12]), AuthError> {
-        let cipher = Aes256Gcm::new_from_slice(key)
-            .map_err(|e| AuthError::Encryption(e.to_string()))?;
+    fn encrypt_api_key(
+        &self,
+        api_key: &str,
+        key: &[u8; 32],
+    ) -> Result<(Vec<u8>, [u8; 12]), AuthError> {
+        let cipher =
+            Aes256Gcm::new_from_slice(key).map_err(|e| AuthError::Encryption(e.to_string()))?;
 
         // Generate random nonce
         let mut nonce_bytes = [0u8; 12];
@@ -1735,9 +1790,14 @@ impl AuthManager {
     }
 
     /// Decrypt an API key using AES-256-GCM
-    fn decrypt_api_key(&self, encrypted: &[u8], nonce: &[u8], key: &[u8; 32]) -> Result<String, AuthError> {
-        let cipher = Aes256Gcm::new_from_slice(key)
-            .map_err(|e| AuthError::Encryption(e.to_string()))?;
+    fn decrypt_api_key(
+        &self,
+        encrypted: &[u8],
+        nonce: &[u8],
+        key: &[u8; 32],
+    ) -> Result<String, AuthError> {
+        let cipher =
+            Aes256Gcm::new_from_slice(key).map_err(|e| AuthError::Encryption(e.to_string()))?;
 
         let nonce = Nonce::from_slice(nonce);
 
@@ -1745,8 +1805,7 @@ impl AuthManager {
             .decrypt(nonce, encrypted)
             .map_err(|e| AuthError::Encryption(e.to_string()))?;
 
-        String::from_utf8(decrypted)
-            .map_err(|e| AuthError::Encryption(e.to_string()))
+        String::from_utf8(decrypted).map_err(|e| AuthError::Encryption(e.to_string()))
     }
 
     // ------------------------------------------------------------------
@@ -1759,7 +1818,9 @@ impl AuthManager {
 
         // Validate name
         if name.trim().is_empty() {
-            return Err(AuthError::Validation("Project name cannot be empty".to_string()));
+            return Err(AuthError::Validation(
+                "Project name cannot be empty".to_string(),
+            ));
         }
 
         self.conn.execute(
@@ -1839,11 +1900,18 @@ impl AuthManager {
     }
 
     /// Update a project
-    pub fn update_project(&self, project_id: i64, name: &str, description: Option<&str>) -> Result<bool, AuthError> {
+    pub fn update_project(
+        &self,
+        project_id: i64,
+        name: &str,
+        description: Option<&str>,
+    ) -> Result<bool, AuthError> {
         let user = self.current_user.as_ref().ok_or(AuthError::NotLoggedIn)?;
 
         if name.trim().is_empty() {
-            return Err(AuthError::Validation("Project name cannot be empty".to_string()));
+            return Err(AuthError::Validation(
+                "Project name cannot be empty".to_string(),
+            ));
         }
 
         let rows_updated = self.conn.execute(
@@ -2007,7 +2075,11 @@ impl AuthManager {
     }
 
     /// Add a session to a project
-    pub fn add_session_to_project(&self, project_id: i64, session_id: i64) -> Result<bool, AuthError> {
+    pub fn add_session_to_project(
+        &self,
+        project_id: i64,
+        session_id: i64,
+    ) -> Result<bool, AuthError> {
         let user = self.current_user.as_ref().ok_or(AuthError::NotLoggedIn)?;
 
         // Verify both project and session belong to current user
@@ -2018,7 +2090,9 @@ impl AuthManager {
         )?;
 
         if !project_owned {
-            return Err(AuthError::Validation("Project not found or access denied".to_string()));
+            return Err(AuthError::Validation(
+                "Project not found or access denied".to_string(),
+            ));
         }
 
         let session_owned: bool = self.conn.query_row(
@@ -2028,7 +2102,9 @@ impl AuthManager {
         )?;
 
         if !session_owned {
-            return Err(AuthError::Validation("Session not found or access denied".to_string()));
+            return Err(AuthError::Validation(
+                "Session not found or access denied".to_string(),
+            ));
         }
 
         // Insert (ignore if already exists)
@@ -2050,7 +2126,11 @@ impl AuthManager {
     }
 
     /// Remove a session from a project
-    pub fn remove_session_from_project(&self, project_id: i64, session_id: i64) -> Result<bool, AuthError> {
+    pub fn remove_session_from_project(
+        &self,
+        project_id: i64,
+        session_id: i64,
+    ) -> Result<bool, AuthError> {
         let user = self.current_user.as_ref().ok_or(AuthError::NotLoggedIn)?;
 
         // Verify project belongs to current user
@@ -2061,7 +2141,9 @@ impl AuthManager {
         )?;
 
         if !project_owned {
-            return Err(AuthError::Validation("Project not found or access denied".to_string()));
+            return Err(AuthError::Validation(
+                "Project not found or access denied".to_string(),
+            ));
         }
 
         let rows_deleted = self.conn.execute(
@@ -2073,7 +2155,10 @@ impl AuthManager {
     }
 
     /// Get all sessions in a project (excludes archived sessions)
-    pub fn get_project_sessions(&self, project_id: i64) -> Result<Vec<ResearchSessionSummary>, AuthError> {
+    pub fn get_project_sessions(
+        &self,
+        project_id: i64,
+    ) -> Result<Vec<ResearchSessionSummary>, AuthError> {
         let user = self.current_user.as_ref().ok_or(AuthError::NotLoggedIn)?;
 
         // Verify project belongs to current user
@@ -2084,7 +2169,9 @@ impl AuthManager {
         )?;
 
         if !project_owned {
-            return Err(AuthError::Validation("Project not found or access denied".to_string()));
+            return Err(AuthError::Validation(
+                "Project not found or access denied".to_string(),
+            ));
         }
 
         let mut stmt = self.conn.prepare(
@@ -2187,7 +2274,9 @@ mod tests {
         manager.login("testuser", "testpass").unwrap();
 
         // Store API key
-        manager.store_api_key(Provider::Anthropic, "sk-ant-test-key-123").unwrap();
+        manager
+            .store_api_key(Provider::Anthropic, "sk-ant-test-key-123")
+            .unwrap();
 
         // Retrieve API key
         let key = manager.get_api_key(Provider::Anthropic).unwrap();

@@ -7,13 +7,18 @@ mod llm;
 mod manifest;
 
 use agent::Agent;
-use auth::{AuthManager, Provider, ApiKeyEntry, Brief, BriefSummary, ConversationMessage, CustomProvider, CustomProviderSummary, PhaseOutput, Project, ProjectSummary, ResearchSession, ResearchSessionSummary, ResumeSessionResult, SessionContext, SessionHistoryMessage, SessionMessage, UserProfile};
+use auth::{
+    ApiKeyEntry, AuthManager, Brief, BriefSummary, ConversationMessage, CustomProvider,
+    CustomProviderSummary, PhaseOutput, Project, ProjectSummary, Provider, ResearchSession,
+    ResearchSessionSummary, ResumeSessionResult, SessionContext, SessionHistoryMessage,
+    SessionMessage, UserProfile,
+};
 use manifest::Manifest;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use tauri::{AppHandle, Manager, State, image::Image};
+use tauri::{image::Image, AppHandle, Manager, State};
 
 // ------------------------------------------------------------------
 // 1. Persistent Configuration Structs
@@ -68,14 +73,22 @@ fn resolve_default_manifest_path() -> Option<PathBuf> {
     if let Ok(exe_path) = std::env::current_exe() {
         if let Some(exe_dir) = exe_path.parent() {
             // Try resources folder next to executable
-            let resource_path = exe_dir.join("resources").join("manifests").join("fullintel_process_manifest.yaml");
+            let resource_path = exe_dir
+                .join("resources")
+                .join("manifests")
+                .join("fullintel_process_manifest.yaml");
             if resource_path.exists() {
-                println!("[DEBUG] Found manifest at resource path: {:?}", resource_path);
+                println!(
+                    "[DEBUG] Found manifest at resource path: {:?}",
+                    resource_path
+                );
                 return Some(resource_path);
             }
 
             // Try direct manifests folder next to executable
-            let direct_path = exe_dir.join("manifests").join("fullintel_process_manifest.yaml");
+            let direct_path = exe_dir
+                .join("manifests")
+                .join("fullintel_process_manifest.yaml");
             if direct_path.exists() {
                 println!("[DEBUG] Found manifest at direct path: {:?}", direct_path);
                 return Some(direct_path);
@@ -85,7 +98,9 @@ fn resolve_default_manifest_path() -> Option<PathBuf> {
 
     // Try 3: Current working directory
     if let Ok(cwd) = std::env::current_dir() {
-        let cwd_path = cwd.join("manifests").join("fullintel_process_manifest.yaml");
+        let cwd_path = cwd
+            .join("manifests")
+            .join("fullintel_process_manifest.yaml");
         if cwd_path.exists() {
             println!("[DEBUG] Found manifest at cwd path: {:?}", cwd_path);
             return Some(cwd_path);
@@ -159,8 +174,13 @@ async fn auth_register(
     password: String,
     auth_state: State<'_, AuthState>,
 ) -> Result<UserInfo, String> {
-    let mut manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
-    let user = manager.register(&username, &password).map_err(|e| e.to_string())?;
+    let mut manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
+    let user = manager
+        .register(&username, &password)
+        .map_err(|e| e.to_string())?;
     Ok(UserInfo {
         id: user.id,
         username: user.username,
@@ -177,8 +197,13 @@ async fn auth_login(
     password: String,
     auth_state: State<'_, AuthState>,
 ) -> Result<UserInfo, String> {
-    let mut manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
-    let user = manager.login(&username, &password).map_err(|e| e.to_string())?;
+    let mut manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
+    let user = manager
+        .login(&username, &password)
+        .map_err(|e| e.to_string())?;
     Ok(UserInfo {
         id: user.id,
         username: user.username,
@@ -191,14 +216,20 @@ async fn auth_login(
 
 #[tauri::command]
 async fn auth_logout(auth_state: State<'_, AuthState>) -> Result<(), String> {
-    let mut manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+    let mut manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
     manager.logout();
     Ok(())
 }
 
 #[tauri::command]
 async fn auth_current_user(auth_state: State<'_, AuthState>) -> Result<Option<UserInfo>, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
     Ok(manager.current_user().map(|u| UserInfo {
         id: u.id,
         username: u.username.clone(),
@@ -211,13 +242,19 @@ async fn auth_current_user(auth_state: State<'_, AuthState>) -> Result<Option<Us
 
 #[tauri::command]
 async fn auth_is_logged_in(auth_state: State<'_, AuthState>) -> Result<bool, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
     Ok(manager.is_logged_in())
 }
 
 #[tauri::command]
 async fn get_user_profile(auth_state: State<'_, AuthState>) -> Result<UserProfile, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
     manager.get_user_profile().map_err(|e| e.to_string())
 }
 
@@ -229,14 +266,19 @@ async fn update_user_profile(
     location: Option<String>,
     auth_state: State<'_, AuthState>,
 ) -> Result<UserInfo, String> {
-    let mut manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+    let mut manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
     let profile = UserProfile {
         first_name,
         last_name,
         role,
         location,
     };
-    let user = manager.update_user_profile(profile).map_err(|e| e.to_string())?;
+    let user = manager
+        .update_user_profile(profile)
+        .map_err(|e| e.to_string())?;
     Ok(UserInfo {
         id: user.id,
         username: user.username,
@@ -257,10 +299,15 @@ async fn store_provider_key(
     api_key: String,
     auth_state: State<'_, AuthState>,
 ) -> Result<(), String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
-    let provider_enum = Provider::from_str(&provider)
-        .ok_or_else(|| format!("Unknown provider: {}", provider))?;
-    manager.store_api_key(provider_enum, &api_key).map_err(|e| e.to_string())
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
+    let provider_enum =
+        Provider::from_str(&provider).ok_or_else(|| format!("Unknown provider: {}", provider))?;
+    manager
+        .store_api_key(provider_enum, &api_key)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -268,10 +315,15 @@ async fn get_provider_key(
     provider: String,
     auth_state: State<'_, AuthState>,
 ) -> Result<Option<String>, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
-    let provider_enum = Provider::from_str(&provider)
-        .ok_or_else(|| format!("Unknown provider: {}", provider))?;
-    manager.get_api_key(provider_enum).map_err(|e| e.to_string())
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
+    let provider_enum =
+        Provider::from_str(&provider).ok_or_else(|| format!("Unknown provider: {}", provider))?;
+    manager
+        .get_api_key(provider_enum)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -279,15 +331,23 @@ async fn delete_provider_key(
     provider: String,
     auth_state: State<'_, AuthState>,
 ) -> Result<(), String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
-    let provider_enum = Provider::from_str(&provider)
-        .ok_or_else(|| format!("Unknown provider: {}", provider))?;
-    manager.delete_api_key(provider_enum).map_err(|e| e.to_string())
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
+    let provider_enum =
+        Provider::from_str(&provider).ok_or_else(|| format!("Unknown provider: {}", provider))?;
+    manager
+        .delete_api_key(provider_enum)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 async fn list_provider_keys(auth_state: State<'_, AuthState>) -> Result<Vec<ApiKeyEntry>, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
     manager.list_api_keys().map_err(|e| e.to_string())
 }
 
@@ -303,7 +363,10 @@ async fn save_brief(
     content: String,
     auth_state: State<'_, AuthState>,
 ) -> Result<i64, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
     manager
         .save_brief(&company, &model, manifest_name.as_deref(), &content)
         .map_err(|e| e.to_string())
@@ -311,19 +374,31 @@ async fn save_brief(
 
 #[tauri::command]
 async fn list_briefs(auth_state: State<'_, AuthState>) -> Result<Vec<BriefSummary>, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
     manager.list_briefs().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-async fn get_brief(brief_id: i64, auth_state: State<'_, AuthState>) -> Result<Option<Brief>, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+async fn get_brief(
+    brief_id: i64,
+    auth_state: State<'_, AuthState>,
+) -> Result<Option<Brief>, String> {
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
     manager.get_brief(brief_id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 async fn delete_brief(brief_id: i64, auth_state: State<'_, AuthState>) -> Result<bool, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
     manager.delete_brief(brief_id).map_err(|e| e.to_string())
 }
 
@@ -334,7 +409,10 @@ async fn add_conversation_message(
     content: String,
     auth_state: State<'_, AuthState>,
 ) -> Result<i64, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
     manager
         .add_conversation_message(brief_id, &role, &content)
         .map_err(|e| e.to_string())
@@ -345,8 +423,13 @@ async fn get_conversation(
     brief_id: i64,
     auth_state: State<'_, AuthState>,
 ) -> Result<Vec<ConversationMessage>, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
-    manager.get_conversation(brief_id).map_err(|e| e.to_string())
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
+    manager
+        .get_conversation(brief_id)
+        .map_err(|e| e.to_string())
 }
 
 // ------------------------------------------------------------------
@@ -361,15 +444,23 @@ async fn add_custom_provider(
     api_key_header: String,
     auth_state: State<'_, AuthState>,
 ) -> Result<i64, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
     manager
         .add_custom_provider(&name, &endpoint_url, &model_id, &api_key_header)
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-async fn list_custom_providers(auth_state: State<'_, AuthState>) -> Result<Vec<CustomProviderSummary>, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+async fn list_custom_providers(
+    auth_state: State<'_, AuthState>,
+) -> Result<Vec<CustomProviderSummary>, String> {
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
     manager.list_custom_providers().map_err(|e| e.to_string())
 }
 
@@ -378,8 +469,13 @@ async fn get_custom_provider(
     provider_id: i64,
     auth_state: State<'_, AuthState>,
 ) -> Result<Option<CustomProvider>, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
-    manager.get_custom_provider(provider_id).map_err(|e| e.to_string())
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
+    manager
+        .get_custom_provider(provider_id)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -387,8 +483,13 @@ async fn get_custom_provider_by_key(
     provider_key: String,
     auth_state: State<'_, AuthState>,
 ) -> Result<Option<CustomProvider>, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
-    manager.get_custom_provider_by_key(&provider_key).map_err(|e| e.to_string())
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
+    manager
+        .get_custom_provider_by_key(&provider_key)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -396,8 +497,13 @@ async fn delete_custom_provider(
     provider_id: i64,
     auth_state: State<'_, AuthState>,
 ) -> Result<bool, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
-    manager.delete_custom_provider(provider_id).map_err(|e| e.to_string())
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
+    manager
+        .delete_custom_provider(provider_id)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -406,8 +512,13 @@ async fn store_custom_provider_key(
     api_key: String,
     auth_state: State<'_, AuthState>,
 ) -> Result<(), String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
-    manager.store_custom_api_key(&provider_key, &api_key).map_err(|e| e.to_string())
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
+    manager
+        .store_custom_api_key(&provider_key, &api_key)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -415,8 +526,13 @@ async fn get_custom_provider_api_key(
     provider_key: String,
     auth_state: State<'_, AuthState>,
 ) -> Result<Option<String>, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
-    manager.get_custom_api_key(&provider_key).map_err(|e| e.to_string())
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
+    manager
+        .get_custom_api_key(&provider_key)
+        .map_err(|e| e.to_string())
 }
 
 // ------------------------------------------------------------------
@@ -430,7 +546,10 @@ async fn create_research_session(
     manifest_name: Option<String>,
     auth_state: State<'_, AuthState>,
 ) -> Result<i64, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
     manager
         .create_research_session(&company, &model, manifest_name.as_deref())
         .map_err(|e| e.to_string())
@@ -443,15 +562,23 @@ async fn update_research_session(
     current_phase_id: Option<String>,
     auth_state: State<'_, AuthState>,
 ) -> Result<(), String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
     manager
         .update_research_session(session_id, &status, current_phase_id.as_deref())
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-async fn list_research_sessions(auth_state: State<'_, AuthState>) -> Result<Vec<ResearchSessionSummary>, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+async fn list_research_sessions(
+    auth_state: State<'_, AuthState>,
+) -> Result<Vec<ResearchSessionSummary>, String> {
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
     manager.list_research_sessions().map_err(|e| e.to_string())
 }
 
@@ -460,8 +587,13 @@ async fn get_research_session(
     session_id: i64,
     auth_state: State<'_, AuthState>,
 ) -> Result<Option<ResearchSession>, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
-    manager.get_research_session(session_id).map_err(|e| e.to_string())
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
+    manager
+        .get_research_session(session_id)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -469,8 +601,13 @@ async fn delete_research_session(
     session_id: i64,
     auth_state: State<'_, AuthState>,
 ) -> Result<bool, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
-    manager.delete_research_session(session_id).map_err(|e| e.to_string())
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
+    manager
+        .delete_research_session(session_id)
+        .map_err(|e| e.to_string())
 }
 
 /// Rename a research session (update the company/name field)
@@ -480,8 +617,13 @@ async fn rename_research_session(
     new_name: String,
     auth_state: State<'_, AuthState>,
 ) -> Result<(), String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
-    manager.rename_research_session(session_id, &new_name).map_err(|e| e.to_string())
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
+    manager
+        .rename_research_session(session_id, &new_name)
+        .map_err(|e| e.to_string())
 }
 
 /// Save or update a phase output (upserts on session_id + phase_id)
@@ -498,7 +640,10 @@ async fn save_phase_output(
     error: Option<String>,
     auth_state: State<'_, AuthState>,
 ) -> Result<i64, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
     manager
         .save_phase_output(
             session_id,
@@ -518,8 +663,13 @@ async fn get_phase_outputs(
     session_id: i64,
     auth_state: State<'_, AuthState>,
 ) -> Result<Vec<PhaseOutput>, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
-    manager.get_phase_outputs(session_id).map_err(|e| e.to_string())
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
+    manager
+        .get_phase_outputs(session_id)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -527,8 +677,13 @@ async fn get_last_completed_phase(
     session_id: i64,
     auth_state: State<'_, AuthState>,
 ) -> Result<Option<PhaseOutput>, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
-    manager.get_last_completed_phase(session_id).map_err(|e| e.to_string())
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
+    manager
+        .get_last_completed_phase(session_id)
+        .map_err(|e| e.to_string())
 }
 
 // ------------------------------------------------------------------
@@ -544,7 +699,10 @@ async fn add_session_message(
     content: String,
     auth_state: State<'_, AuthState>,
 ) -> Result<i64, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
     manager
         .add_session_message(session_id, phase_id.as_deref(), &role, &content)
         .map_err(|e| e.to_string())
@@ -558,7 +716,10 @@ async fn get_session_conversation(
     limit: Option<u32>,
     auth_state: State<'_, AuthState>,
 ) -> Result<Vec<SessionMessage>, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
     manager
         .get_session_conversation(session_id, phase_id.as_deref(), limit)
         .map_err(|e| e.to_string())
@@ -578,16 +739,18 @@ fn reconstruct_session_context(
     let pairs: Vec<(SessionHistoryMessage, SessionHistoryMessage)> = phase_outputs
         .iter()
         .filter(|p| p.status == "completed" && p.user_input.is_some() && p.output.is_some())
-        .map(|p| (
-            SessionHistoryMessage {
-                role: "user".to_string(),
-                content: p.user_input.clone().unwrap_or_default(),
-            },
-            SessionHistoryMessage {
-                role: "assistant".to_string(),
-                content: p.output.clone().unwrap_or_default(),
-            },
-        ))
+        .map(|p| {
+            (
+                SessionHistoryMessage {
+                    role: "user".to_string(),
+                    content: p.user_input.clone().unwrap_or_default(),
+                },
+                SessionHistoryMessage {
+                    role: "assistant".to_string(),
+                    content: p.output.clone().unwrap_or_default(),
+                },
+            )
+        })
         .collect();
 
     // Apply sliding window - keep most recent pairs
@@ -605,32 +768,51 @@ async fn resume_research_session(
     session_id: i64,
     auth_state: State<'_, AuthState>,
 ) -> Result<ResumeSessionResult, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
 
     // 1. Load session
-    let session = manager.get_research_session(session_id)
+    let session = manager
+        .get_research_session(session_id)
         .map_err(|e| format!("Session {} not found: {}", session_id, e))?
         .ok_or_else(|| format!("Session {} not found", session_id))?;
 
     // 2. Validate status
     match session.status.as_str() {
         "completed" => return Err(format!("Session {} already completed", session_id)),
-        "failed" => return Err(format!("Session {} failed and cannot be resumed", session_id)),
-        "in_progress" | "paused" => {}, // OK to resume
-        _ => return Err(format!("Session {} has invalid status: {}", session_id, session.status)),
+        "failed" => {
+            return Err(format!(
+                "Session {} failed and cannot be resumed",
+                session_id
+            ))
+        }
+        "in_progress" | "paused" => {} // OK to resume
+        _ => {
+            return Err(format!(
+                "Session {} has invalid status: {}",
+                session_id, session.status
+            ))
+        }
     }
 
     // 3. Load phase outputs
-    let phase_outputs = manager.get_phase_outputs(session_id)
+    let phase_outputs = manager
+        .get_phase_outputs(session_id)
         .map_err(|e| e.to_string())?;
 
     // 4. Find completed phases
-    let completed_phases: Vec<_> = phase_outputs.iter()
+    let completed_phases: Vec<_> = phase_outputs
+        .iter()
         .filter(|p| p.status == "completed")
         .collect();
 
     if completed_phases.is_empty() {
-        return Err(format!("Session {} has no completed phases to resume from", session_id));
+        return Err(format!(
+            "Session {} has no completed phases to resume from",
+            session_id
+        ));
     }
 
     let last_completed = completed_phases.last().unwrap();
@@ -642,7 +824,8 @@ async fn resume_research_session(
     let history = reconstruct_session_context(&phase_outputs, 25);
 
     // 7. Count total phases (from manifest would be better, but we use phase_outputs as proxy)
-    let total_phases = phase_outputs.iter()
+    let total_phases = phase_outputs
+        .iter()
         .map(|p| &p.phase_id)
         .collect::<std::collections::HashSet<_>>()
         .len()
@@ -684,7 +867,10 @@ async fn create_project(
     description: Option<String>,
     auth_state: State<'_, AuthState>,
 ) -> Result<i64, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
     manager
         .create_project(&name, description.as_deref())
         .map_err(|e| e.to_string())
@@ -693,7 +879,10 @@ async fn create_project(
 /// List all projects for the current user
 #[tauri::command]
 async fn list_projects(auth_state: State<'_, AuthState>) -> Result<Vec<ProjectSummary>, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
     manager.list_projects().map_err(|e| e.to_string())
 }
 
@@ -703,7 +892,10 @@ async fn get_project(
     project_id: i64,
     auth_state: State<'_, AuthState>,
 ) -> Result<Option<Project>, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
     manager.get_project(project_id).map_err(|e| e.to_string())
 }
 
@@ -715,7 +907,10 @@ async fn update_project(
     description: Option<String>,
     auth_state: State<'_, AuthState>,
 ) -> Result<(), String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
     manager
         .update_project(project_id, &name, description.as_deref())
         .map_err(|e| e.to_string())?;
@@ -724,12 +919,14 @@ async fn update_project(
 
 /// Delete a project (cascades to remove project-session associations)
 #[tauri::command]
-async fn delete_project(
-    project_id: i64,
-    auth_state: State<'_, AuthState>,
-) -> Result<bool, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
-    manager.delete_project(project_id).map_err(|e| e.to_string())
+async fn delete_project(project_id: i64, auth_state: State<'_, AuthState>) -> Result<bool, String> {
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
+    manager
+        .delete_project(project_id)
+        .map_err(|e| e.to_string())
 }
 
 // =====================================================
@@ -742,8 +939,13 @@ async fn archive_project(
     project_id: i64,
     auth_state: State<'_, AuthState>,
 ) -> Result<bool, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
-    manager.archive_project(project_id).map_err(|e| e.to_string())
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
+    manager
+        .archive_project(project_id)
+        .map_err(|e| e.to_string())
 }
 
 /// Unarchive a project (restore to main list)
@@ -752,8 +954,13 @@ async fn unarchive_project(
     project_id: i64,
     auth_state: State<'_, AuthState>,
 ) -> Result<bool, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
-    manager.unarchive_project(project_id).map_err(|e| e.to_string())
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
+    manager
+        .unarchive_project(project_id)
+        .map_err(|e| e.to_string())
 }
 
 /// Archive a research session (soft delete - hides from main list)
@@ -762,8 +969,13 @@ async fn archive_session(
     session_id: i64,
     auth_state: State<'_, AuthState>,
 ) -> Result<bool, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
-    manager.archive_session(session_id).map_err(|e| e.to_string())
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
+    manager
+        .archive_session(session_id)
+        .map_err(|e| e.to_string())
 }
 
 /// Unarchive a research session (restore to main list)
@@ -772,8 +984,13 @@ async fn unarchive_session(
     session_id: i64,
     auth_state: State<'_, AuthState>,
 ) -> Result<bool, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
-    manager.unarchive_session(session_id).map_err(|e| e.to_string())
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
+    manager
+        .unarchive_session(session_id)
+        .map_err(|e| e.to_string())
 }
 
 /// List archived projects (for the Archived section in sidebar)
@@ -781,7 +998,10 @@ async fn unarchive_session(
 async fn list_archived_projects(
     auth_state: State<'_, AuthState>,
 ) -> Result<Vec<auth::ProjectSummary>, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
     manager.list_archived_projects().map_err(|e| e.to_string())
 }
 
@@ -790,7 +1010,10 @@ async fn list_archived_projects(
 async fn list_archived_sessions(
     auth_state: State<'_, AuthState>,
 ) -> Result<Vec<auth::ResearchSessionSummary>, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
     manager.list_archived_sessions().map_err(|e| e.to_string())
 }
 
@@ -801,7 +1024,10 @@ async fn add_session_to_project(
     session_id: i64,
     auth_state: State<'_, AuthState>,
 ) -> Result<(), String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
     manager
         .add_session_to_project(project_id, session_id)
         .map_err(|e| e.to_string())?;
@@ -815,7 +1041,10 @@ async fn remove_session_from_project(
     session_id: i64,
     auth_state: State<'_, AuthState>,
 ) -> Result<(), String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
     manager
         .remove_session_from_project(project_id, session_id)
         .map_err(|e| e.to_string())?;
@@ -828,8 +1057,13 @@ async fn get_project_sessions(
     project_id: i64,
     auth_state: State<'_, AuthState>,
 ) -> Result<Vec<ResearchSessionSummary>, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
-    manager.get_project_sessions(project_id).map_err(|e| e.to_string())
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
+    manager
+        .get_project_sessions(project_id)
+        .map_err(|e| e.to_string())
 }
 
 // ------------------------------------------------------------------
@@ -857,7 +1091,10 @@ async fn get_documents_base_path(app: AppHandle) -> Result<String, String> {
 
 /// Helper trait for pipe-style programming
 trait Pipe: Sized {
-    fn pipe<F, R>(self, f: F) -> R where F: FnOnce(Self) -> R {
+    fn pipe<F, R>(self, f: F) -> R
+    where
+        F: FnOnce(Self) -> R,
+    {
         f(self)
     }
 }
@@ -872,30 +1109,38 @@ async fn export_phase_as_markdown(
     auth_state: State<'_, AuthState>,
     app: AppHandle,
 ) -> Result<String, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
 
     // Get session info for directory naming
-    let session = manager.get_research_session(session_id)
+    let session = manager
+        .get_research_session(session_id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Session {} not found", session_id))?;
 
     // Get phase outputs
-    let phase_outputs = manager.get_phase_outputs(session_id)
+    let phase_outputs = manager
+        .get_phase_outputs(session_id)
         .map_err(|e| e.to_string())?;
 
     // Find the specific phase
-    let phase = phase_outputs.iter()
+    let phase = phase_outputs
+        .iter()
         .find(|p| p.phase_id == phase_id)
         .ok_or_else(|| format!("Phase {} not found in session {}", phase_id, session_id))?;
 
     // Get base documents path
-    let doc_dir = app.path()
+    let doc_dir = app
+        .path()
         .document_dir()
         .map_err(|e| format!("Failed to get documents directory: {}", e))?;
 
     // Build directory path: base/subject/manifest-name/
     let safe_company = sanitize_filename(&session.company);
-    let safe_manifest = session.manifest_name
+    let safe_manifest = session
+        .manifest_name
         .as_ref()
         .map(|m| sanitize_filename(m))
         .unwrap_or_else(|| "default-manifest".to_string());
@@ -920,8 +1165,7 @@ async fn export_phase_as_markdown(
     let content = format_phase_as_markdown(&session, phase);
 
     // Write the file
-    fs::write(&file_path, &content)
-        .map_err(|e| format!("Failed to write file: {}", e))?;
+    fs::write(&file_path, &content).map_err(|e| format!("Failed to write file: {}", e))?;
 
     Ok(file_path.to_string_lossy().to_string())
 }
@@ -933,25 +1177,32 @@ async fn export_session_as_markdown(
     auth_state: State<'_, AuthState>,
     app: AppHandle,
 ) -> Result<String, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
 
     // Get session info
-    let session = manager.get_research_session(session_id)
+    let session = manager
+        .get_research_session(session_id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Session {} not found", session_id))?;
 
     // Get all phase outputs
-    let phase_outputs = manager.get_phase_outputs(session_id)
+    let phase_outputs = manager
+        .get_phase_outputs(session_id)
         .map_err(|e| e.to_string())?;
 
     // Get base documents path
-    let doc_dir = app.path()
+    let doc_dir = app
+        .path()
         .document_dir()
         .map_err(|e| format!("Failed to get documents directory: {}", e))?;
 
     // Build directory path
     let safe_company = sanitize_filename(&session.company);
-    let safe_manifest = session.manifest_name
+    let safe_manifest = session
+        .manifest_name
         .as_ref()
         .map(|m| sanitize_filename(m))
         .unwrap_or_else(|| "default-manifest".to_string());
@@ -995,8 +1246,7 @@ async fn export_session_as_markdown(
     }
 
     // Write the file
-    fs::write(&file_path, &content)
-        .map_err(|e| format!("Failed to write file: {}", e))?;
+    fs::write(&file_path, &content).map_err(|e| format!("Failed to write file: {}", e))?;
 
     Ok(file_path.to_string_lossy().to_string())
 }
@@ -1008,25 +1258,32 @@ async fn export_all_phases_as_markdown(
     auth_state: State<'_, AuthState>,
     app: AppHandle,
 ) -> Result<Vec<String>, String> {
-    let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+    let manager = auth_state
+        .manager
+        .lock()
+        .map_err(|_| "Failed to lock auth state")?;
 
     // Get session info
-    let session = manager.get_research_session(session_id)
+    let session = manager
+        .get_research_session(session_id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Session {} not found", session_id))?;
 
     // Get all phase outputs
-    let phase_outputs = manager.get_phase_outputs(session_id)
+    let phase_outputs = manager
+        .get_phase_outputs(session_id)
         .map_err(|e| e.to_string())?;
 
     // Get base documents path
-    let doc_dir = app.path()
+    let doc_dir = app
+        .path()
         .document_dir()
         .map_err(|e| format!("Failed to get documents directory: {}", e))?;
 
     // Build directory path
     let safe_company = sanitize_filename(&session.company);
-    let safe_manifest = session.manifest_name
+    let safe_manifest = session
+        .manifest_name
         .as_ref()
         .map(|m| sanitize_filename(m))
         .unwrap_or_else(|| "default-manifest".to_string());
@@ -1045,7 +1302,11 @@ async fn export_all_phases_as_markdown(
     let mut saved_files = Vec::new();
 
     // Export each completed phase
-    for (idx, phase) in phase_outputs.iter().filter(|p| p.status == "completed").enumerate() {
+    for (idx, phase) in phase_outputs
+        .iter()
+        .filter(|p| p.status == "completed")
+        .enumerate()
+    {
         let safe_phase_name = sanitize_filename(&phase.phase_name);
         let filename = format!("{:02}_{}.md", idx + 1, safe_phase_name);
         let file_path = output_dir.join(&filename);
@@ -1103,7 +1364,10 @@ async fn set_api_key(key: String, state: State<'_, AppState>) -> Result<(), Stri
     let trimmed_key = key.trim().to_string();
 
     // 2. Debug log key length (NOT the key itself for security)
-    println!("[DEBUG] API key received, length: {} chars", trimmed_key.len());
+    println!(
+        "[DEBUG] API key received, length: {} chars",
+        trimmed_key.len()
+    );
 
     // 3. Update Memory
     {
@@ -1138,13 +1402,19 @@ async fn set_manifest_path(path: String, state: State<'_, AppState>) -> Result<(
 }
 
 #[tauri::command]
-async fn get_manifest_phases(manifest_path: Option<String>, state: State<'_, AppState>) -> Result<Vec<PhaseInfo>, String> {
+async fn get_manifest_phases(
+    manifest_path: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<PhaseInfo>, String> {
     // Use provided path or fall back to saved path
     let path = if let Some(p) = manifest_path {
         PathBuf::from(p)
     } else {
         let config = state.config.lock().map_err(|_| "Failed to lock state")?;
-        config.last_manifest_path.clone().ok_or("No manifest path set")?
+        config
+            .last_manifest_path
+            .clone()
+            .ok_or("No manifest path set")?
     };
 
     if !path.exists() {
@@ -1153,10 +1423,14 @@ async fn get_manifest_phases(manifest_path: Option<String>, state: State<'_, App
 
     let manifest = Manifest::load_from_file(&path).map_err(|e| e.to_string())?;
 
-    let phases: Vec<PhaseInfo> = manifest.phases.iter().map(|p| PhaseInfo {
-        id: p.id.clone(),
-        name: p.name.clone(),
-    }).collect();
+    let phases: Vec<PhaseInfo> = manifest
+        .phases
+        .iter()
+        .map(|p| PhaseInfo {
+            id: p.id.clone(),
+            name: p.name.clone(),
+        })
+        .collect();
 
     Ok(phases)
 }
@@ -1172,13 +1446,19 @@ struct ManifestInfo {
 }
 
 #[tauri::command]
-async fn get_manifest_info(manifest_path: Option<String>, state: State<'_, AppState>) -> Result<ManifestInfo, String> {
+async fn get_manifest_info(
+    manifest_path: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<ManifestInfo, String> {
     // Use provided path or fall back to saved path
     let path = if let Some(p) = manifest_path {
         PathBuf::from(p)
     } else {
         let config = state.config.lock().map_err(|_| "Failed to lock state")?;
-        config.last_manifest_path.clone().ok_or("No manifest path set")?
+        config
+            .last_manifest_path
+            .clone()
+            .ok_or("No manifest path set")?
     };
 
     if !path.exists() {
@@ -1203,7 +1483,11 @@ async fn get_saved_manifests(state: State<'_, AppState>) -> Result<Vec<SavedMani
 }
 
 #[tauri::command]
-async fn save_manifest_to_list(name: String, path: String, state: State<'_, AppState>) -> Result<(), String> {
+async fn save_manifest_to_list(
+    name: String,
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
     let path_buf = PathBuf::from(&path);
     if !path_buf.exists() {
         return Err(format!("Manifest file not found: {}", path));
@@ -1212,10 +1496,17 @@ async fn save_manifest_to_list(name: String, path: String, state: State<'_, AppS
     {
         let mut config = state.config.lock().map_err(|_| "Failed to lock state")?;
         // Find existing manifest by path and update name, or add new
-        if let Some(existing) = config.saved_manifests.iter_mut().find(|m| m.path == path_buf) {
+        if let Some(existing) = config
+            .saved_manifests
+            .iter_mut()
+            .find(|m| m.path == path_buf)
+        {
             existing.name = name;
         } else {
-            config.saved_manifests.push(SavedManifest { name, path: path_buf });
+            config.saved_manifests.push(SavedManifest {
+                name,
+                path: path_buf,
+            });
         }
     }
     state.save()?;
@@ -1251,14 +1542,18 @@ async fn load_manifest_file(path: String) -> Result<String, String> {
 #[tauri::command]
 async fn validate_manifest(content: String) -> Result<Vec<PhaseInfo>, String> {
     // Try to parse the YAML content
-    let manifest: Manifest = serde_yaml::from_str(&content)
-        .map_err(|e| format!("Invalid YAML: {}", e))?;
+    let manifest: Manifest =
+        serde_yaml::from_str(&content).map_err(|e| format!("Invalid YAML: {}", e))?;
 
     // Return phase info
-    let phases: Vec<PhaseInfo> = manifest.phases.iter().map(|p| PhaseInfo {
-        id: p.id.clone(),
-        name: p.name.clone(),
-    }).collect();
+    let phases: Vec<PhaseInfo> = manifest
+        .phases
+        .iter()
+        .map(|p| PhaseInfo {
+            id: p.id.clone(),
+            name: p.name.clone(),
+        })
+        .collect();
 
     Ok(phases)
 }
@@ -1271,11 +1566,11 @@ async fn get_manifest_input_label(path: String) -> Result<Option<String>, String
         return Ok(None);
     }
 
-    let content = fs::read_to_string(&path_buf)
-        .map_err(|e| format!("Failed to read manifest: {}", e))?;
+    let content =
+        fs::read_to_string(&path_buf).map_err(|e| format!("Failed to read manifest: {}", e))?;
 
-    let manifest: Manifest = serde_yaml::from_str(&content)
-        .map_err(|e| format!("Invalid manifest YAML: {}", e))?;
+    let manifest: Manifest =
+        serde_yaml::from_str(&content).map_err(|e| format!("Invalid manifest YAML: {}", e))?;
 
     Ok(manifest.manifest.input_label)
 }
@@ -1286,18 +1581,19 @@ async fn get_manifest_name(path: String) -> Result<String, String> {
     let path_buf = PathBuf::from(&path);
     if !path_buf.exists() {
         // Fallback to filename if file doesn't exist
-        let filename = path_buf.file_stem()
+        let filename = path_buf
+            .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("Unknown")
             .to_string();
         return Ok(filename);
     }
 
-    let content = fs::read_to_string(&path_buf)
-        .map_err(|e| format!("Failed to read manifest: {}", e))?;
+    let content =
+        fs::read_to_string(&path_buf).map_err(|e| format!("Failed to read manifest: {}", e))?;
 
-    let manifest: Manifest = serde_yaml::from_str(&content)
-        .map_err(|e| format!("Invalid manifest YAML: {}", e))?;
+    let manifest: Manifest =
+        serde_yaml::from_str(&content).map_err(|e| format!("Invalid manifest YAML: {}", e))?;
 
     Ok(manifest.manifest.name)
 }
@@ -1306,21 +1602,19 @@ async fn get_manifest_name(path: String) -> Result<String, String> {
 #[tauri::command]
 async fn save_manifest_file(path: String, content: String) -> Result<(), String> {
     // First validate the content
-    let _manifest: Manifest = serde_yaml::from_str(&content)
-        .map_err(|e| format!("Invalid YAML - cannot save: {}", e))?;
+    let _manifest: Manifest =
+        serde_yaml::from_str(&content).map_err(|e| format!("Invalid YAML - cannot save: {}", e))?;
 
     // Create parent directories if needed
     let path_buf = PathBuf::from(&path);
     if let Some(parent) = path_buf.parent() {
         if !parent.exists() {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create directory: {}", e))?;
+            fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {}", e))?;
         }
     }
 
     // Write the file
-    fs::write(&path_buf, &content)
-        .map_err(|e| format!("Failed to write manifest file: {}", e))?;
+    fs::write(&path_buf, &content).map_err(|e| format!("Failed to write manifest file: {}", e))?;
 
     Ok(())
 }
@@ -1381,7 +1675,8 @@ quality_gates:
   - phase: "PHASE-01-RESEARCH"
     check: "Is the research comprehensive?"
     fail_action: "RETRY"
-"#.to_string())
+"#
+    .to_string())
 }
 
 #[tauri::command]
@@ -1403,7 +1698,8 @@ async fn send_followup(
 
     let system_prompt = "You are a helpful assistant analyzing business intelligence reports. \
         The user has generated a research report and wants to ask follow-up questions. \
-        Use the provided context to give accurate, relevant answers.".to_string();
+        Use the provided context to give accurate, relevant answers."
+        .to_string();
 
     let user_prompt = format!(
         "Here is the generated report:\n\n{}\n\n---\n\nUser question: {}",
@@ -1443,7 +1739,10 @@ async fn run_single_phase(
 
     // 2. Mark phase as "running" and save the prompts
     {
-        let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+        let manager = auth_state
+            .manager
+            .lock()
+            .map_err(|_| "Failed to lock auth state")?;
         manager
             .save_phase_output(
                 session_id,
@@ -1472,7 +1771,10 @@ async fn run_single_phase(
     match result {
         Ok(output) => {
             // Save successful output
-            let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+            let manager = auth_state
+                .manager
+                .lock()
+                .map_err(|_| "Failed to lock auth state")?;
             manager
                 .save_phase_output(
                     session_id,
@@ -1490,7 +1792,10 @@ async fn run_single_phase(
         Err(e) => {
             // Save error state
             let error_msg = e.to_string();
-            let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+            let manager = auth_state
+                .manager
+                .lock()
+                .map_err(|_| "Failed to lock auth state")?;
             manager
                 .save_phase_output(
                     session_id,
@@ -1542,12 +1847,16 @@ async fn run_research(
 
     // 3. Create research session for persistence (L1-ARCHITECTURE Section 5.3 requirement)
     // This enables auto-save of every phase completion to SQLite
-    let manifest_name = manifest_path.file_name()
+    let manifest_name = manifest_path
+        .file_name()
         .and_then(|n| n.to_str())
         .map(|s| s.to_string());
 
     let session_id = {
-        let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+        let manager = auth_state
+            .manager
+            .lock()
+            .map_err(|_| "Failed to lock auth state")?;
         // Only create session if user is logged in
         if manager.is_logged_in() {
             match manager.create_research_session(&company, &model, manifest_name.as_deref()) {
@@ -1570,7 +1879,13 @@ async fn run_research(
     // Using AppHandle instead of Window for global event emission (Tauri 2.0 pattern)
     // The model parameter allows overriding the default model for all phases
     // The session_id enables phase-output events to include session context
-    let mut agent = Agent::new(manifest, api_key, Some(app.clone()), Some(model), session_id);
+    let mut agent = Agent::new(
+        manifest,
+        api_key,
+        Some(app.clone()),
+        Some(model),
+        session_id,
+    );
 
     // 5. Execute Workflow (The Heavy Lifting)
     // This runs the phases defined in the YAML
@@ -1578,7 +1893,10 @@ async fn run_research(
 
     // 6. Update session status based on workflow result
     if let Some(sid) = session_id {
-        let manager = auth_state.manager.lock().map_err(|_| "Failed to lock auth state")?;
+        let manager = auth_state
+            .manager
+            .lock()
+            .map_err(|_| "Failed to lock auth state")?;
         match &workflow_result {
             Ok(_) => {
                 let _ = manager.update_research_session(sid, "completed", None);
