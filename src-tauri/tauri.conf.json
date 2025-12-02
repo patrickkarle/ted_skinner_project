@@ -23,11 +23,14 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["msi", "nsis"],
+    "targets": "all",
     "icon": [
-      "icons/icon.ico",
       "icons/32x32.png",
-      "icons/128x128.png"
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico",
+      "icons/icon.png"
     ],
     "resources": {
       "../manifests/*": "manifests/"
@@ -35,6 +38,21 @@
     "windows": {
       "digestAlgorithm": "sha256",
       "timestampUrl": ""
+    },
+    "macOS": {
+      "minimumSystemVersion": "10.15",
+      "exceptionDomain": null,
+      "signingIdentity": null,
+      "providerShortName": null,
+      "entitlements": null
+    },
+    "linux": {
+      "appimage": {
+        "bundleMediaFramework": false
+      },
+      "deb": {
+        "depends": []
+      }
     }
   }
 }

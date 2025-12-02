@@ -3,7 +3,7 @@
 A powerful desktop application for AI-powered research workflows and intelligent conversations. Execute multi-phase research protocols, engage in LLM chat, and generate comprehensive executive briefs on companies, industries, and emerging technologies.
 
 ![Version](https://img.shields.io/badge/version-0.1.0-blue)
-![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey)
+![Platform](https://img.shields.io/badge/platform-Windows%20|%20macOS%20|%20Linux-lightgrey)
 
 ## Features
 
@@ -61,20 +61,55 @@ A powerful desktop application for AI-powered research workflows and intelligent
 
 ## Installation
 
-### Windows Installer
+### Windows
 
 1. Download `fullintel-agent_0.1.0_x64-setup.exe` from [Releases](../../releases)
 2. Run the installer and follow the wizard
 3. Launch "FullIntel Agent" from the Start Menu
 
-### Requirements
+**Alternative:** Download the `.msi` installer for enterprise deployment.
 
-- Windows 10/11 (64-bit)
-- API key from at least one supported provider:
-  - [Anthropic Claude](https://console.anthropic.com)
-  - [OpenAI GPT](https://platform.openai.com)
-  - [Google Gemini](https://aistudio.google.com)
-  - [DeepSeek](https://platform.deepseek.com)
+### macOS
+
+#### Intel Macs (x64)
+1. Download `fullintel-agent_0.1.0_x64.dmg` from [Releases](../../releases)
+2. Open the DMG and drag the app to Applications
+3. Launch from Applications folder
+
+#### Apple Silicon (M1/M2/M3)
+1. Download `fullintel-agent_0.1.0_aarch64.dmg` from [Releases](../../releases)
+2. Open the DMG and drag the app to Applications
+3. Launch from Applications folder
+
+**Note:** On first launch, you may need to right-click → Open to bypass Gatekeeper since the app is not notarized.
+
+### Linux
+
+#### AppImage (Universal)
+1. Download `fullintel-agent_0.1.0_amd64.AppImage` from [Releases](../../releases)
+2. Make it executable: `chmod +x fullintel-agent_*.AppImage`
+3. Run it: `./fullintel-agent_*.AppImage`
+
+#### Debian/Ubuntu (.deb)
+1. Download `fullintel-agent_0.1.0_amd64.deb` from [Releases](../../releases)
+2. Install: `sudo dpkg -i fullintel-agent_*.deb`
+3. Launch from your application menu or run `fullintel-agent`
+
+### System Requirements
+
+| Platform | Requirements |
+|----------|-------------|
+| **Windows** | Windows 10/11 (64-bit), WebView2 Runtime |
+| **macOS** | macOS 10.15 (Catalina) or later |
+| **Linux** | GTK 3, WebKitGTK 4.1, glibc 2.31+ |
+
+### API Key Requirement
+
+You'll need an API key from at least one supported provider:
+- [Anthropic Claude](https://console.anthropic.com)
+- [OpenAI GPT](https://platform.openai.com)
+- [Google Gemini](https://aistudio.google.com)
+- [DeepSeek](https://platform.deepseek.com)
 
 ## Quick Start
 
@@ -222,6 +257,20 @@ ted_skinner_project/
 - [Rust](https://rustup.rs/) 1.70+
 - [Tauri CLI](https://tauri.app/)
 
+#### Platform-Specific Dependencies
+
+**Windows:**
+- WebView2 (usually pre-installed on Windows 10/11)
+- Visual Studio Build Tools with C++ workload
+
+**macOS:**
+- Xcode Command Line Tools: `xcode-select --install`
+
+**Linux (Debian/Ubuntu):**
+```bash
+sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
+```
+
 ### Setup
 
 ```bash
@@ -231,8 +280,14 @@ npm install
 # Run in development mode
 npm run tauri dev
 
-# Build for production
+# Build for production (current platform)
 npm run tauri build
+
+# Build for specific target
+npm run tauri build -- --target x86_64-apple-darwin    # macOS Intel
+npm run tauri build -- --target aarch64-apple-darwin   # macOS Apple Silicon
+npm run tauri build -- --target x86_64-unknown-linux-gnu  # Linux
+npm run tauri build -- --target x86_64-pc-windows-msvc    # Windows
 ```
 
 ### Testing
@@ -313,11 +368,16 @@ Add your own AI providers for additional flexibility:
 
 All user data is stored locally on your machine:
 
-| Data | Location |
-|------|----------|
-| User Database | `%APPDATA%\com.fullintel.agent\users.db` |
-| Configuration | `%APPDATA%\com.fullintel.agent\config.json` |
-| Research Sessions | Stored in SQLite database |
+| Platform | Data Directory |
+|----------|---------------|
+| **Windows** | `%APPDATA%\com.fullintel.agent\` |
+| **macOS** | `~/Library/Application Support/com.fullintel.agent/` |
+| **Linux** | `~/.local/share/com.fullintel.agent/` |
+
+| File | Purpose |
+|------|---------|
+| `users.db` | User database and research sessions |
+| `config.json` | Application configuration |
 
 No data is sent to external servers except for the AI API calls to your selected provider.
 
@@ -401,9 +461,21 @@ Group related research sessions:
 - Verify you selected the correct provider in Settings
 
 ### App Won't Start
+
+**Windows:**
 - Ensure Windows 10/11 64-bit
 - Try running as Administrator
 - Check if WebView2 Runtime is installed
+
+**macOS:**
+- Right-click the app → Open (to bypass Gatekeeper)
+- Check System Preferences → Security & Privacy if blocked
+- Ensure macOS 10.15 or later
+
+**Linux:**
+- Check dependencies: `libgtk-3-0`, `libwebkit2gtk-4.1-0`
+- For AppImage: ensure FUSE is installed (`sudo apt install fuse`)
+- Run from terminal to see error messages
 
 ### Research Hangs or Fails
 - Check your internet connection
