@@ -1,20 +1,63 @@
 # FullIntel Agent
 
-A desktop application for automated AI-powered research workflows. Execute multi-phase research protocols to generate comprehensive executive briefs on companies, industries, and emerging technologies.
+A powerful desktop application for AI-powered research workflows and intelligent conversations. Execute multi-phase research protocols, engage in LLM chat, and generate comprehensive executive briefs on companies, industries, and emerging technologies.
 
 ![Version](https://img.shields.io/badge/version-0.1.0-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey)
 
 ## Features
 
-- **Multi-Provider AI Support** - Choose from Anthropic Claude, OpenAI GPT, Google Gemini, or DeepSeek
-- **Multi-Phase Research Workflows** - Execute structured research protocols with AI-powered analysis
-- **Real-Time Streaming** - Watch research results stream in as each phase completes
-- **Multiple Research Manifests** - Choose from 7 pre-configured research protocols
-- **Session Persistence** - Save and resume research sessions
-- **Project Organization** - Group related research sessions into projects
-- **Export Capabilities** - Export research results as Markdown
-- **Secure Authentication** - Local user accounts with encrypted password storage
+### 🤖 Multi-Provider AI Support
+- **4 Built-in Providers** - Anthropic Claude, OpenAI GPT, Google Gemini, DeepSeek
+- **Custom Provider Support** - Add your own API endpoints (e.g., local Ollama, custom OpenAI-compatible APIs)
+- **Per-Provider API Keys** - Configure different keys for each provider
+- **Model Selection** - Choose from 12+ models across providers
+
+### 💬 Dual-Mode Operation
+- **Chat Mode** - Direct LLM conversations without requiring research workflows
+- **Research Mode** - Execute structured multi-phase research protocols
+- **Seamless Switching** - Toggle between modes with a single click
+- **Post-Research Followup** - Continue conversations after research completes
+
+### 📋 Manifest System
+- **7 Pre-configured Protocols** - Ready-to-use research workflows for different analysis types
+- **Manifest Editor** - Full-featured YAML editor with syntax validation
+- **Create Custom Manifests** - Design your own research workflows from scratch
+- **Load External Manifests** - Import YAML files from anywhere on your system
+- **Live Phase Preview** - See validated phases before running
+- **Manifest Management** - Rename, remove, and organize your manifest library
+
+### 📊 Research Session Management
+- **Full Session Persistence** - All sessions saved to local SQLite database
+- **Session History** - Browse all past research sessions with search
+- **Session Resume** - Continue incomplete research from where you left off
+- **Phase-Level Storage** - Each phase output saved individually with timestamps
+- **Project Organization** - Group related sessions into named projects
+- **Archive System** - Archive and restore both projects and sessions
+
+### ✏️ Prompt Editing & Relaunch
+- **View Prompts** - See exactly what system/user prompts were sent to the LLM
+- **Edit Prompts** - Modify prompts before re-running a phase
+- **Phase Relaunch** - Re-run any individual phase with original or modified prompts
+- **Prompt History** - All prompts preserved for reproducibility
+
+### 🔄 Real-Time Features
+- **Streaming Output** - Watch AI responses appear token-by-token
+- **Live Phase Status** - Visual progress indicators for each phase
+- **Activity Logs** - Detailed execution logs with timing information
+- **Abort Support** - Cancel running operations at any time
+
+### 📤 Export & Output
+- **Copy to Clipboard** - One-click copy of full research output
+- **Markdown Export** - Save results as formatted Markdown files
+- **Print Support** - Print-optimized views for physical copies
+- **Per-Phase Export** - Export individual phase outputs separately
+
+### 🔐 Security & Privacy
+- **Local-First Design** - All data stored locally on your machine
+- **Encrypted Credentials** - API keys and passwords securely stored
+- **User Accounts** - Multi-user support with separate data isolation
+- **No External Telemetry** - Only API calls to your selected LLM provider
 
 ## Installation
 
@@ -35,12 +78,28 @@ A desktop application for automated AI-powered research workflows. Execute multi
 
 ## Quick Start
 
+### First Time Setup
 1. **Create Account** - Set up a local user account on first launch
 2. **Configure API Key** - Go to Settings (gear icon) and enter your API key for any supported provider
-3. **Select Provider & Model** - Choose your AI provider and model from the dropdowns
-4. **Select Manifest** - Choose a research protocol from the dropdown
-5. **Enter Topic** - Type a company name or research subject
-6. **Run Research** - Click "Run" and watch the results stream in
+
+### Chat Mode (Default)
+1. **Select Model** - Choose your AI provider and model from the dropdowns
+2. **Type Message** - Enter your question or prompt in the input field
+3. **Send** - Press Enter or click Send to chat with the AI
+4. **Continue Conversation** - Follow up with additional questions
+
+### Research Mode
+1. **Switch Mode** - Click "Research" toggle (next to Chat)
+2. **Select Manifest** - Choose a research protocol from the dropdown
+3. **Enter Topic** - Type a company name or research subject
+4. **Run Research** - Click "Run" and watch results stream in phase by phase
+5. **Follow Up** - Ask questions about the research after it completes
+
+### Session Management
+1. **View History** - Browse past sessions in the left sidebar
+2. **Resume Session** - Click any incomplete session to resume from last phase
+3. **Edit & Relaunch** - View prompts for any phase, edit them, and re-run
+4. **Organize** - Create projects to group related research sessions
 
 ## Research Manifests
 
@@ -88,11 +147,31 @@ quality_gates:
 
 ### Creating Custom Manifests
 
-You can create your own research protocols by:
-1. Creating a new `.yaml` file in the `manifests/` directory
-2. Following the manifest schema structure
-3. Defining phases with clear instructions
-4. Adding quality gates for validation
+#### Using the Manifest Editor (Recommended)
+1. Click the **"+ New"** button in the Manifests section of the sidebar
+2. The Manifest Editor opens with a template
+3. Edit the YAML content with your custom phases and instructions
+4. Click **"Validate"** to check for errors
+5. Click **"Save"** to save your manifest
+6. Click **"Use Manifest"** to load it immediately
+
+#### Editing Existing Manifests
+1. Click the **"Edit"** (pencil icon) next to any manifest
+2. Modify the YAML content in the editor
+3. Validate and save your changes
+4. Changes are immediately available for use
+
+#### Loading External Files
+1. Click **"Open"** in the Manifest Editor toolbar
+2. Select any `.yaml` or `.yml` file from your system
+3. Validate the content
+4. Save to add it to your manifest library
+
+#### Manual File Creation
+You can also create manifests manually:
+1. Create a new `.yaml` file in the `manifests/` directory
+2. Follow the manifest schema structure
+3. Restart the app to see it in the dropdown
 
 ## Architecture
 
@@ -200,6 +279,8 @@ Choose models based on your needs:
 - **GPT-4o** - Latest multimodal model
 - **GPT-4 Turbo** - High capability, faster than GPT-4
 - **GPT-3.5 Turbo** - Fast and economical
+- **o1-preview** - Advanced reasoning model
+- **o3-mini** - Efficient reasoning model
 
 **Google Gemini**
 - **Gemini 1.5 Pro** - Advanced reasoning
@@ -208,6 +289,25 @@ Choose models based on your needs:
 **DeepSeek**
 - **DeepSeek Chat** - General purpose
 - **DeepSeek Coder** - Code-focused analysis
+
+### Custom Providers
+
+Add your own AI providers for additional flexibility:
+
+1. **Open Settings** - Click the gear icon
+2. **Go to Custom Providers** - Select the "Custom Providers" tab
+3. **Add Provider** - Enter:
+   - **Name**: Display name for the provider
+   - **Base URL**: API endpoint (e.g., `http://localhost:11434/v1`)
+   - **Model ID**: Model identifier (e.g., `llama3.2`)
+   - **API Key**: Optional, depending on provider
+4. **Save** - Your custom provider appears in the model dropdown
+
+**Common Use Cases:**
+- Local Ollama instances
+- OpenAI-compatible APIs (Together AI, Groq, etc.)
+- Self-hosted models
+- Enterprise private deployments
 
 ## Data Storage
 
@@ -223,25 +323,67 @@ No data is sent to external servers except for the AI API calls to your selected
 
 ## Usage Guide
 
-### Running Research
+### Chat Mode
 
-1. Select a manifest from the dropdown (e.g., "Fullintel Process")
-2. Enter your research subject in the input field
-3. Click "Run" to start the workflow
-4. Watch as each phase executes and streams results
-5. View the complete brief when all phases finish
+The application defaults to Chat Mode for quick AI conversations:
 
-### Managing Sessions
+1. **Start Chatting** - Type your message in the input field and press Enter
+2. **View Response** - AI responses stream in real-time
+3. **Continue Conversation** - Ask follow-up questions to build context
+4. **Switch Models** - Change AI models mid-conversation if needed
 
-- **View History** - Click sessions in the left sidebar
-- **Resume Session** - Click on any historical session to view
-- **Create Project** - Group related sessions into projects
-- **Export Results** - Copy or export the research output
+### Research Mode
+
+For structured multi-phase research:
+
+1. **Switch to Research** - Click the "Research" toggle button
+2. **Select Manifest** - Choose a research protocol from the dropdown
+3. **Enter Subject** - Type your research topic (company name, technology, etc.)
+4. **Run Workflow** - Click "Run" to start the multi-phase research
+5. **Monitor Progress** - Watch each phase complete with streaming output
+6. **Follow Up** - Ask questions about the research after completion
+
+### Session Management
+
+#### Viewing Sessions
+- **Session History** - All sessions listed in sidebar, organized by date
+- **Session Details** - Click any session to view all phase outputs
+- **Phase Expansion** - Click phase headers to expand/collapse outputs
+
+#### Session Resume
+- **Incomplete Sessions** - Sessions that didn't complete show "in_progress" status
+- **Resume Button** - Click "Resume" to continue from the last completed phase
+- **Context Preservation** - All previous phase outputs are used as context
+
+#### Prompt Editing & Relaunch
+- **View Prompts** - Click "View Prompts" on any phase to see system/user prompts
+- **Edit Mode** - Click "Edit" to modify the prompts
+- **Relaunch Phase** - Click "Relaunch" to re-run with original or modified prompts
+- **Reproducibility** - Original prompts always preserved for reference
+
+### Project Organization
+
+Group related research sessions:
+
+1. **Create Project** - Click "New Project" in the sidebar
+2. **Name Project** - Give it a descriptive name
+3. **Add Sessions** - Use session menu (⋯) → "Add to Project"
+4. **View Project Sessions** - Click project to expand and see all sessions
+5. **Archive Projects** - Archive completed projects to declutter
+
+### Export Options
+
+- **Copy** - Click copy icon to copy all output to clipboard
+- **Export Markdown** - Use menu to save as `.md` file
+- **Print** - Print-optimized view for physical copies
+- **Per-Phase Export** - Copy individual phase outputs
 
 ### Keyboard Shortcuts
 
 | Action | Shortcut |
 |--------|----------|
+| Send Message | `Enter` |
+| New Line in Message | `Shift+Enter` |
 | New Research | `Ctrl+N` |
 | Settings | `Ctrl+,` |
 | Export | `Ctrl+E` |
