@@ -2513,20 +2513,65 @@ mod tests {
     }
 
     #[test]
-    fn test_detect_provider_unsupported_model() {
-        // TEST-UNIT-LLMCLIENT-005: Verify detect_provider() rejects unknown models
-        // Purpose: Validate error handling for unsupported model names
+    fn test_detect_provider_openai() {
+        // TEST-UNIT-LLMCLIENT-004b: Verify detect_provider() identifies OpenAI models
+        // Purpose: Validate provider detection for gpt-*, o1-*, o3-* model names
 
         let client = LLMClient::new("test-key".to_string());
 
-        let result = client.detect_provider("gpt-4");
-        assert!(result.is_err(), "Should return error for unsupported model");
+        // GPT models
+        let provider = client.detect_provider("gpt-4").unwrap();
+        assert_eq!(provider, "openai", "Should detect openai from gpt-4");
 
-        let result2 = client.detect_provider("llama-3");
-        assert!(result2.is_err(), "Should return error for llama-3");
+        let provider2 = client.detect_provider("gpt-4o").unwrap();
+        assert_eq!(provider2, "openai", "Should detect openai from gpt-4o");
 
+        let provider3 = client.detect_provider("gpt-3.5-turbo").unwrap();
+        assert_eq!(
+            provider3, "openai",
+            "Should detect openai from gpt-3.5-turbo"
+        );
+
+        // o1 reasoning models
+        let provider4 = client.detect_provider("o1-preview").unwrap();
+        assert_eq!(provider4, "openai", "Should detect openai from o1-preview");
+
+        // o3 models
+        let provider5 = client.detect_provider("o3-mini").unwrap();
+        assert_eq!(provider5, "openai", "Should detect openai from o3-mini");
+    }
+
+    #[test]
+    fn test_detect_provider_unsupported_model() {
+        // TEST-UNIT-LLMCLIENT-005: Verify detect_provider() rejects unknown models
+        // Purpose: Validate error handling for unsupported model names
+        //
+        // Note: Supported providers and their model prefixes:
+        // - anthropic: "claude*"
+        // - openai: "gpt*", "o1*", "o3*"
+        // - google: "gemini*"
+        // - deepseek: "deepseek*"
+
+        let client = LLMClient::new("test-key".to_string());
+
+        // llama models are not supported (no Llama/Meta provider integration)
+        let result = client.detect_provider("llama-3");
+        assert!(result.is_err(), "Should return error for llama-3");
+
+        // mistral models are not supported (no Mistral provider integration)
+        let result2 = client.detect_provider("mistral-large");
+        assert!(result2.is_err(), "Should return error for mistral-large");
+
+        // completely unknown model names should error
         let result3 = client.detect_provider("unknown-model");
         assert!(result3.is_err(), "Should return error for unknown-model");
+
+        // verify error type is UnsupportedModel
+        if let Err(LLMError::UnsupportedModel(model_name)) = result3 {
+            assert_eq!(model_name, "unknown-model");
+        } else {
+            panic!("Expected UnsupportedModel error");
+        }
     }
 
     #[test]
