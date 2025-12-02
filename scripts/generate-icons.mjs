@@ -38,26 +38,29 @@ async function generateIcons() {
     const outputPath = join(iconsDir, `${size}x${size}.png`);
     await sharp(sourceImage)
       .resize(size, size, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
+      .ensureAlpha()  // Ensure RGBA format (required by Tauri)
       .png()
       .toFile(outputPath);
-    console.log(`Generated: ${size}x${size}.png`);
+    console.log(`Generated: ${size}x${size}.png (RGBA)`);
   }
 
   // Generate macOS retina icon (128x128@2x = 256x256 pixels)
   const retinaPath = join(iconsDir, '128x128@2x.png');
   await sharp(sourceImage)
     .resize(256, 256, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
+    .ensureAlpha()  // Ensure RGBA format (required by Tauri)
     .png()
     .toFile(retinaPath);
-  console.log('Generated: 128x128@2x.png (macOS retina)');
+  console.log('Generated: 128x128@2x.png (macOS retina, RGBA)');
 
   // Generate master icon.png (512x512 for Linux/cross-platform)
   const masterIconPath = join(iconsDir, 'icon.png');
   await sharp(sourceImage)
     .resize(512, 512, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
+    .ensureAlpha()  // Ensure RGBA format (required by Tauri)
     .png()
     .toFile(masterIconPath);
-  console.log('Generated: icon.png (512x512 master)');
+  console.log('Generated: icon.png (512x512 master, RGBA)');
 
   // Generate ICO file with 32px FIRST for optimal dev display
   // Order matters! First layer is shown in development mode
