@@ -7,6 +7,7 @@ A desktop application for automated AI-powered research workflows. Execute multi
 
 ## Features
 
+- **Multi-Provider AI Support** - Choose from Anthropic Claude, OpenAI GPT, Google Gemini, or DeepSeek
 - **Multi-Phase Research Workflows** - Execute structured research protocols with AI-powered analysis
 - **Real-Time Streaming** - Watch research results stream in as each phase completes
 - **Multiple Research Manifests** - Choose from 7 pre-configured research protocols
@@ -26,15 +27,20 @@ A desktop application for automated AI-powered research workflows. Execute multi
 ### Requirements
 
 - Windows 10/11 (64-bit)
-- [Anthropic API Key](https://console.anthropic.com) - Required for AI functionality
+- API key from at least one supported provider:
+  - [Anthropic Claude](https://console.anthropic.com)
+  - [OpenAI GPT](https://platform.openai.com)
+  - [Google Gemini](https://aistudio.google.com)
+  - [DeepSeek](https://platform.deepseek.com)
 
 ## Quick Start
 
 1. **Create Account** - Set up a local user account on first launch
-2. **Configure API Key** - Go to Settings (gear icon) and enter your Anthropic API key
-3. **Select Manifest** - Choose a research protocol from the dropdown
-4. **Enter Topic** - Type a company name or research subject
-5. **Run Research** - Click "Run" and watch the results stream in
+2. **Configure API Key** - Go to Settings (gear icon) and enter your API key for any supported provider
+3. **Select Provider & Model** - Choose your AI provider and model from the dropdowns
+4. **Select Manifest** - Choose a research protocol from the dropdown
+5. **Enter Topic** - Type a company name or research subject
+6. **Run Research** - Click "Run" and watch the results stream in
 
 ## Research Manifests
 
@@ -95,7 +101,11 @@ You can create your own research protocols by:
 - **Frontend**: React 18 + TypeScript + Vite
 - **Backend**: Rust (Tauri v2)
 - **Database**: SQLite with rusqlite
-- **AI Integration**: Anthropic Claude API (streaming)
+- **AI Integration**: Multi-provider support with streaming
+  - Anthropic Claude (Claude Opus 4, Sonnet 4.5, Haiku 3.5)
+  - OpenAI GPT (GPT-4o, GPT-4 Turbo, GPT-3.5 Turbo)
+  - Google Gemini (Gemini 1.5 Pro, Gemini 1.5 Flash)
+  - DeepSeek (DeepSeek Chat, DeepSeek Coder)
 - **Styling**: CSS with design tokens
 
 ### Project Structure
@@ -162,17 +172,42 @@ cargo test battery3  # System tests
 
 ### API Key Setup
 
-1. Visit [console.anthropic.com](https://console.anthropic.com)
-2. Create an account and generate an API key
-3. In the app, click Settings (gear icon)
-4. Enter your API key and click Save
+Get an API key from any supported provider:
+
+| Provider | Console URL | Notes |
+|----------|-------------|-------|
+| **Anthropic** | [console.anthropic.com](https://console.anthropic.com) | Claude models |
+| **OpenAI** | [platform.openai.com](https://platform.openai.com) | GPT models |
+| **Google** | [aistudio.google.com](https://aistudio.google.com) | Gemini models |
+| **DeepSeek** | [platform.deepseek.com](https://platform.deepseek.com) | Cost-effective alternative |
+
+Then in the app:
+1. Click Settings (gear icon)
+2. Select your provider from the dropdown
+3. Enter your API key
+4. Click Save
 
 ### Model Selection
 
-Select from available Claude models in the dropdown:
-- **Claude Sonnet 4.5** (Recommended - balanced speed/quality)
-- **Claude Opus 4** (Highest quality, slower)
-- **Claude Haiku 3.5** (Fastest, lower cost)
+Choose models based on your needs:
+
+**Anthropic Claude**
+- **Claude Opus 4** - Highest quality, complex analysis
+- **Claude Sonnet 4.5** - Recommended balance of speed/quality
+- **Claude Haiku 3.5** - Fastest, lower cost
+
+**OpenAI GPT**
+- **GPT-4o** - Latest multimodal model
+- **GPT-4 Turbo** - High capability, faster than GPT-4
+- **GPT-3.5 Turbo** - Fast and economical
+
+**Google Gemini**
+- **Gemini 1.5 Pro** - Advanced reasoning
+- **Gemini 1.5 Flash** - Fast responses
+
+**DeepSeek**
+- **DeepSeek Chat** - General purpose
+- **DeepSeek Coder** - Code-focused analysis
 
 ## Data Storage
 
@@ -184,7 +219,7 @@ All user data is stored locally on your machine:
 | Configuration | `%APPDATA%\com.fullintel.agent\config.json` |
 | Research Sessions | Stored in SQLite database |
 
-No data is sent to external servers except for the AI API calls to Anthropic.
+No data is sent to external servers except for the AI API calls to your selected provider.
 
 ## Usage Guide
 
@@ -214,9 +249,14 @@ No data is sent to external servers except for the AI API calls to Anthropic.
 ## Troubleshooting
 
 ### "API Key Invalid" Error
-- Verify your API key at [console.anthropic.com](https://console.anthropic.com)
+- Verify your API key at your provider's console:
+  - Anthropic: [console.anthropic.com](https://console.anthropic.com)
+  - OpenAI: [platform.openai.com](https://platform.openai.com)
+  - Google: [aistudio.google.com](https://aistudio.google.com)
+  - DeepSeek: [platform.deepseek.com](https://platform.deepseek.com)
 - Ensure the key has not expired
 - Check for extra spaces when pasting
+- Verify you selected the correct provider in Settings
 
 ### App Won't Start
 - Ensure Windows 10/11 64-bit
@@ -226,8 +266,8 @@ No data is sent to external servers except for the AI API calls to Anthropic.
 ### Research Hangs or Fails
 - Check your internet connection
 - Verify API key is valid and has credits
-- Check Anthropic API status at [status.anthropic.com](https://status.anthropic.com)
-- Try a different model (Haiku is most reliable)
+- Check your provider's API status page
+- Try a different model or provider
 
 ### Session Not Saving
 - Ensure you're logged in
