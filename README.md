@@ -2,7 +2,7 @@
 
 A powerful desktop application for AI-powered research workflows and intelligent conversations. Execute multi-phase research protocols, engage in LLM chat, and generate comprehensive executive briefs on companies, industries, and emerging technologies.
 
-![Version](https://img.shields.io/badge/version-0.1.0-blue)
+![Version](https://img.shields.io/badge/version-0.1.1-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%20|%20macOS%20|%20Linux-lightgrey)
 
 ## Features
@@ -67,16 +67,16 @@ All binaries are available on the [GitHub Releases](../../releases) page:
 
 | Platform | File | Type |
 |----------|------|------|
-| **Windows** | `fullintel-agent_0.1.0_x64-setup.exe` | NSIS installer (recommended) |
-| **Windows** | `fullintel-agent_0.1.0_x64_en-US.msi` | MSI installer (enterprise) |
-| **macOS Intel** | `fullintel-agent_0.1.0_x64.dmg` | Disk image |
-| **macOS Apple Silicon** | `fullintel-agent_0.1.0_aarch64.dmg` | Disk image (M1/M2/M3) |
-| **Linux** | `fullintel-agent_0.1.0_amd64.AppImage` | Universal (any distro) |
-| **Linux** | `fullintel-agent_0.1.0_amd64.deb` | Debian/Ubuntu package |
+| **Windows** | `fullintel-agent_0.1.1_x64-setup.exe` | NSIS installer (recommended) |
+| **Windows** | `fullintel-agent_0.1.1_x64_en-US.msi` | MSI installer (enterprise) |
+| **macOS Intel** | `fullintel-agent_0.1.1_x64.dmg` | Disk image |
+| **macOS Apple Silicon** | `fullintel-agent_0.1.1_aarch64.dmg` | Disk image (M1/M2/M3) |
+| **Linux** | `fullintel-agent_0.1.1_amd64.AppImage` | Universal (any distro) |
+| **Linux** | `fullintel-agent_0.1.1_amd64.deb` | Debian/Ubuntu package |
 
 ### Windows
 
-1. Download `fullintel-agent_0.1.0_x64-setup.exe` from [Releases](../../releases)
+1. Download `fullintel-agent_0.1.1_x64-setup.exe` from [Releases](../../releases)
 2. Run the installer and follow the wizard
 3. Launch "FullIntel Agent" from the Start Menu
 
@@ -85,12 +85,12 @@ All binaries are available on the [GitHub Releases](../../releases) page:
 ### macOS
 
 #### Intel Macs (x64)
-1. Download `fullintel-agent_0.1.0_x64.dmg` from [Releases](../../releases)
+1. Download `fullintel-agent_0.1.1_x64.dmg` from [Releases](../../releases)
 2. Open the DMG and drag the app to Applications
 3. Launch from Applications folder
 
 #### Apple Silicon (M1/M2/M3)
-1. Download `fullintel-agent_0.1.0_aarch64.dmg` from [Releases](../../releases)
+1. Download `fullintel-agent_0.1.1_aarch64.dmg` from [Releases](../../releases)
 2. Open the DMG and drag the app to Applications
 3. Launch from Applications folder
 
@@ -99,12 +99,12 @@ All binaries are available on the [GitHub Releases](../../releases) page:
 ### Linux
 
 #### AppImage (Universal)
-1. Download `fullintel-agent_0.1.0_amd64.AppImage` from [Releases](../../releases)
+1. Download `fullintel-agent_0.1.1_amd64.AppImage` from [Releases](../../releases)
 2. Make it executable: `chmod +x fullintel-agent_*.AppImage`
 3. Run it: `./fullintel-agent_*.AppImage`
 
 #### Debian/Ubuntu (.deb)
-1. Download `fullintel-agent_0.1.0_amd64.deb` from [Releases](../../releases)
+1. Download `fullintel-agent_0.1.1_amd64.deb` from [Releases](../../releases)
 2. Install: `sudo dpkg -i fullintel-agent_*.deb`
 3. Launch from your application menu or run `fullintel-agent`
 
@@ -500,6 +500,20 @@ Group related research sessions:
 - Ensure you're logged in
 - Check disk space
 - Restart the application
+
+## Security
+
+### Known Advisories
+
+| Advisory | Severity | Platforms | Status |
+|----------|----------|-----------|--------|
+| [GHSA-wrw7-89jp-8q8g](https://github.com/advisories/GHSA-wrw7-89jp-8q8g) | Medium | Linux only | Upstream dependency |
+
+**GHSA-wrw7-89jp-8q8g**: A memory safety issue in the `glib` crate (v0.18.5) affects Linux builds. This is a transitive dependency from Tauri's GTK/WebKit stack and cannot be patched until the upstream gtk-rs ecosystem releases glib 0.20.0 compatibility. Windows and macOS builds are unaffected. The vulnerability requires malformed GVariant data from an untrusted source to exploit, which is not a vector in this application's design.
+
+### Reporting Security Issues
+
+To report a security vulnerability, please open a private security advisory on GitHub or contact the maintainer directly.
 
 ## Support
 
