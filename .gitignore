@@ -70,3 +70,6 @@ briefs-generated/
 
 # UI preview files
 ui-preview*.html
+
+# Development archive (internal dev notes)
+docs/dev-archive/
