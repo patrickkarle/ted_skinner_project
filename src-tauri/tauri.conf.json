@@ -1,6 +1,6 @@
 {
   "productName": "fullintel-agent",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "identifier": "com.fullintel.agent",
   "build": {
     "beforeDevCommand": "npm run dev",

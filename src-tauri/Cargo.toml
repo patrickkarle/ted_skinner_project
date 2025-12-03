@@ -1,6 +1,6 @@
 [package]
 name = "fullintel-agent"
-version = "0.1.0"
+version = "0.1.1"
 description = "Fullintel Sales Intelligence Generator - AI-powered sales research and outreach automation"
 authors = ["Ted Skinner"]
 edition = "2021"
